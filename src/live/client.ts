@@ -40,6 +40,11 @@ async function rpc(method: string, params: unknown[]) {
   return json.result
 }
 
+/** Current gas price in gwei (public RPC). */
+export async function readGasPriceGwei(): Promise<number> {
+  return Number(BigInt(await rpc('eth_gasPrice', []))) / 1e9
+}
+
 /** Public vault facts for the stats band: deposits made so far and ETH held. */
 export async function readVaultStats(): Promise<{ notes: number; ethLocked: number }> {
   const [next, bal] = await Promise.all([

@@ -5,7 +5,8 @@ import { Modal } from '../../components/ui/Modal'
 import { StatusLog, useStatusLog } from '../../components/ui/StatusLog'
 import { fmtEth, fmtUsd } from '../../lib/format'
 import { getActiveProvider } from '../../lib/wallet'
-import { errorMessage } from '../../live/client'
+import { LIVE } from '../../config/mode'
+import { errorMessage, readGasPriceGwei } from '../../live/client'
 import { useLive } from '../../live/LiveProvider'
 import { useAccount } from '../../live/useAccount'
 import { useUi } from '../../state/ui'
@@ -17,6 +18,7 @@ export function LiveWithdrawModal({ open }: { open: boolean }) {
   const ui = useUi()
   const [phase, setPhase] = useState<'form' | 'running' | 'done' | 'error'>('form')
   const [mode, setMode] = useState<'mutual' | 'escape'>('mutual')
+  const [gasGwei, setGasGwei] = useState<number | null>(null)
   const log = useStatusLog()
 
   useEffect(() => {
@@ -24,9 +26,13 @@ export function LiveWithdrawModal({ open }: { open: boolean }) {
       setPhase('form')
       setMode('mutual')
       log.reset()
+      readGasPriceGwei()
+        .then(setGasGwei)
+        .catch(() => setGasGwei(null))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+  const feeEth = gasGwei != null ? (LIVE.withdrawGas * gasGwei) / 1e9 : null
 
   const wallet = account.wallet
   const amount = live?.balanceEth ?? 0
@@ -69,7 +75,12 @@ export function LiveWithdrawModal({ open }: { open: boolean }) {
               ['PRIVATE BALANCE', <span className="text-fg">{fmtEth(amount, 6)} ETH</span>],
               ['APPROX.', live?.ethUsd ? fmtUsd(amount * live.ethUsd, { cents: true }) : '—'],
               ['TO', wallet ? <CopyAddress value={wallet.address} /> : '—'],
-              ['GAS', 'paid by the connected wallet'],
+              [
+                'NETWORK FEE (EST.)',
+                feeEth != null
+                  ? `≈ ${fmtEth(feeEth, 4)} ETH${live?.ethUsd ? ` · ${fmtUsd(feeEth * live.ethUsd, { cents: true })}` : ''} @ ${gasGwei!.toFixed(2)} gwei`
+                  : 'paid by the connected wallet',
+              ],
             ]}
           />
           <p className="text-[12.5px] leading-relaxed text-dim">

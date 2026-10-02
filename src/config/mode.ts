@@ -37,6 +37,15 @@ export const LIVE = {
   /** USD cap of each short-lived key; the SDK only charges actual usage. */
   spendingLimitUsd: 1,
   noteTtlDays: 30,
+  /**
+   * Gas a vault deposit uses (on-chain Poseidon Merkle insert), measured on
+   * mainnet 2026-10-02: ~6.74M regardless of the amount deposited.
+   */
+  depositGas: 6_750_000,
+  /** Gas a cooperative close/withdrawal uses (Groth16 verify on-chain), ~7.05M. */
+  withdrawGas: 7_050_000,
+  /** Above this share of the deposit, the fund dialog warns that gas is expensive. */
+  feeWarnShare: 0.2,
   operator: 'Open Anonymity',
   models: {
     claude: 'anthropic/claude-sonnet-5.5',

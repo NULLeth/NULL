@@ -8,7 +8,7 @@ import { StatusLog, useStatusLog } from '../../components/ui/StatusLog'
 import { LIVE } from '../../config/mode'
 import { fmtEth, fmtUsd, shortAddr } from '../../lib/format'
 import { getActiveProvider } from '../../lib/wallet'
-import { errorMessage } from '../../live/client'
+import { errorMessage, readGasPriceGwei } from '../../live/client'
 import { useLive } from '../../live/LiveProvider'
 import { useAccount } from '../../live/useAccount'
 import { useUi } from '../../state/ui'
@@ -32,6 +32,7 @@ export function LiveFundModal({ open }: { open: boolean }) {
   const [customValue, setCustomValue] = useState('')
   const [ack, setAck] = useState(false)
   const [phase, setPhase] = useState<'form' | 'running' | 'done' | 'error'>('form')
+  const [gasGwei, setGasGwei] = useState<number | null>(null)
   const log = useStatusLog()
 
   useEffect(() => {
@@ -43,10 +44,30 @@ export function LiveFundModal({ open }: { open: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  // Deposits cost a fixed ~6.7M gas, so show the fee before anyone signs.
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    const load = () =>
+      readGasPriceGwei()
+        .then((g) => alive && setGasGwei(g))
+        .catch(() => {})
+    load()
+    const t = setInterval(load, 15_000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [open])
+
   const amount = custom ? parseAmount(customValue) : (preset ?? 0)
   const valid = Number.isFinite(amount) && amount >= 0.001 && amount <= LIVE.depositCapEth
   const usd = (eth: number) => (live?.ethUsd ? fmtUsd(eth * live.ethUsd, { cents: true }) : '—')
   const wallet = account.wallet
+  const feeEth = gasGwei != null ? (LIVE.depositGas * gasGwei) / 1e9 : null
+  const exitFeeEth = gasGwei != null ? (LIVE.withdrawGas * gasGwei) / 1e9 : null
+  const feeShare = feeEth != null && exitFeeEth != null && valid ? (feeEth + exitFeeEth) / amount : 0
+  const feeHigh = feeShare > LIVE.feeWarnShare
 
   const submit = async () => {
     if (!live || !wallet || !valid || !ack) return
@@ -131,7 +152,18 @@ export function LiveFundModal({ open }: { open: boolean }) {
         <Summary
           rows={[
             ['WALLET', wallet ? <CopyAddress value={wallet.address} /> : '—'],
-            ['DEPOSIT', valid ? `${fmtEth(amount, 4)} ETH + gas` : '—'],
+            ['DEPOSIT', valid ? `${fmtEth(amount, 4)} ETH` : '—'],
+            [
+              'NETWORK FEE (EST.)',
+              feeEth != null ? (
+                <span className={feeHigh ? 'text-warn' : ''}>
+                  ≈ {fmtEth(feeEth, 4)} ETH · {usd(feeEth)} <span className="text-dim">@ {gasGwei!.toFixed(2)} gwei</span>
+                </span>
+              ) : (
+                'checking gas…'
+              ),
+            ],
+            ['WITHDRAW LATER (EST.)', exitFeeEth != null ? `≈ ${fmtEth(exitFeeEth, 4)} ETH · ${usd(exitFeeEth)}` : '—'],
             ['PRIVATE BALANCE', valid ? <span className="text-fg">{fmtEth(amount, 4)} ETH</span> : '—'],
             ['NETWORK', LIVE.network],
             [
@@ -148,6 +180,13 @@ export function LiveFundModal({ open }: { open: boolean }) {
             ['CLOSE BEFORE', expiryDate()],
           ]}
         />
+        {feeHigh && (
+          <div className="rounded-md border border-warn/25 bg-warn/[0.05] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warn/90">
+            Gas makes up about {Math.round(feeShare * 100)}% of this deposit (paying in and out). zkAPI deposits and withdrawals each use ~7M gas, whatever
+            the amount, so wait for low gas (under ~0.5 gwei) or deposit more at once. In MetaMask, pick the &quot;Market&quot; or &quot;Low&quot; fee
+            instead of &quot;Aggressive&quot;.
+          </div>
+        )}
         <button
           type="button"
           role="checkbox"
