@@ -471,6 +471,11 @@ export function ChatPage() {
         {/* composer */}
         <div className="shrink-0 px-3 pb-4 pt-2 sm:px-6">
           <div className="mx-auto max-w-[780px]">
+            {IS_LIVE && account.status === 'error' && (
+              <div className="mb-3 rounded-lg border border-bad/25 bg-bad/[0.05] px-4 py-3 text-[13px] leading-relaxed text-bad/90">
+                zkAPI could not start: {account.error}
+              </div>
+            )}
             {IS_LIVE && account.status === 'ready' && !account.hasNote && (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line-2 bg-panel/70 px-4 py-3">
                 <span className="text-[13.5px] text-muted">Fund a private balance on Ethereum mainnet to start chatting.</span>
@@ -492,7 +497,15 @@ export function ChatPage() {
                 }}
                 rows={1}
                 disabled={!canSend}
-                placeholder={canSend ? 'Ask privately…' : IS_LIVE && account.status !== 'ready' ? 'Connecting to zkAPI…' : 'Fund a private balance to start'}
+                placeholder={
+                  canSend
+                    ? 'Ask privately…'
+                    : IS_LIVE && account.status === 'loading'
+                      ? 'Connecting to zkAPI…'
+                      : IS_LIVE && account.status === 'error'
+                        ? 'zkAPI is unavailable'
+                        : 'Fund a private balance to start'
+                }
                 className="max-h-[220px] min-h-[26px] flex-1 resize-none bg-transparent py-1 text-[15px] leading-relaxed text-fg outline-none placeholder:text-dim disabled:opacity-60"
               />
               {sending ? (

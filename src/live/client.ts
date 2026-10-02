@@ -10,9 +10,21 @@ let pending: Promise<ZkClient> | null = null
  */
 export function loadZkapi(): Promise<ZkClient> {
   pending ??= (async () => {
+    // The SDK loads its files without cookies (by design). If the host answers
+    // those requests with a login redirect (e.g. Vercel preview protection),
+    // say so instead of hanging forever.
+    const probe = await fetch('/zkapi/browser-config.json', { credentials: 'omit', cache: 'no-store', redirect: 'manual' })
+    if (probe.type === 'opaqueredirect' || !probe.ok) {
+      throw new Error(
+        `zkAPI files are blocked by the host (HTTP ${probe.status || 'redirect'}). On a Vercel preview, turn off Deployment Protection for previews.`,
+      )
+    }
     const sdk = await import('@openanonymity/zkapi-browser-sdk')
     sdk.configureBrowserSdk({ configUrl: '/zkapi/browser-config.json', workerUrl: '/zkapi/assets/zkapiWasmWorker.js' })
-    await sdk.zkapiClient.init()
+    await Promise.race([
+      sdk.zkapiClient.init(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('zkAPI did not start within 45 s. Check your connection and reload.')), 45_000)),
+    ])
     return sdk.zkapiClient
   })().catch((err) => {
     pending = null
