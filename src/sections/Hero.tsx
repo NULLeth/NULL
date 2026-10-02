@@ -20,9 +20,10 @@ const ease = [0.22, 1, 0.36, 1] as const
 
 /** Token contract address, shown once PROJECT.token.ca is set. */
 function TokenBar() {
-  const { ca, ticker } = PROJECT.token
+  const { ca, ticker, chain } = PROJECT.token
   if (!ca) return null
-  const chart = `https://dexscreener.com/${ca.startsWith('0x') ? 'ethereum' : 'solana'}/${ca}`
+  const chart = `https://dexscreener.com/${chain}/${ca}`
+  const swap = `https://app.uniswap.org/swap?chain=${chain}&outputCurrency=${ca}`
   return (
     <div className="mt-6 flex w-fit max-w-full flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line-2 bg-panel/70 px-4 py-2.5 backdrop-blur">
       <span className="font-mono text-[10.5px] tracking-[0.14em] text-dim">{ticker} · CA</span>
@@ -34,6 +35,14 @@ function TokenBar() {
         className="inline-flex items-center gap-1 font-mono text-[10.5px] tracking-[0.14em] text-muted transition-colors hover:text-fg"
       >
         CHART <ArrowUpRight className="size-3" />
+      </a>
+      <a
+        href={swap}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 font-mono text-[10.5px] tracking-[0.14em] text-muted transition-colors hover:text-fg"
+      >
+        UNISWAP <ArrowUpRight className="size-3" />
       </a>
     </div>
   )

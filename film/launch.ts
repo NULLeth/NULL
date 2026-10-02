@@ -545,7 +545,7 @@ function endCard(ctx: CanvasRenderingContext2D, t: number) {
   ctx.restore()
   text(ctx, handle, x0 + w1 + gap, 880, { ...o, color: C.muted, alpha: ba })
   if (PROJECT.token.ca) {
-    text(ctx, `${PROJECT.token.ticker} · CA  ${PROJECT.token.ca}`, 960, 950, { size: 20, family: MONO, color: C.dim, align: 'center', alpha: ba })
+    text(ctx, `${PROJECT.token.ticker} · CA  ${PROJECT.token.ca}`, 960, 952, { size: 22, family: MONO, color: C.muted, align: 'center', alpha: ba })
   }
   ctx.restore()
 }

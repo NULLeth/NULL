@@ -10,13 +10,13 @@ export const PROJECT = {
 
   xHandle: '@NULL_zk',
 
-  /**
-   * Token contract address, shown in the hero once set. Leave empty to hide.
-   * 0x… addresses link to the Ethereum chart, anything else is treated as Solana.
-   */
+  /** Token contract, shown in the hero (and on the film's end card) once set. Empty hides it. */
   token: {
     ticker: '$NULL' as string,
-    ca: '' as string,
+    name: 'NULL zk',
+    ca: '0x51aAa1D6eb8aDFF4Dd73518b825Fc0fE56627160' as string,
+    /** dexscreener chain slug */
+    chain: 'ethereum',
   },
 
   links: {
