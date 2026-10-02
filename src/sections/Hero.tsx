@@ -150,6 +150,14 @@ export function Hero() {
           >
             Enter network
           </Button>
+          <a
+            href="/chat"
+            className="group/btn inline-flex h-12 select-none items-center justify-center gap-2.5 whitespace-nowrap rounded-[6px] border border-ok/35 bg-ok/[0.06] px-6 font-mono text-[12px] uppercase tracking-[0.12em] text-fg transition-[background-color,border-color] duration-200 hover:border-ok/60 hover:bg-ok/[0.1] active:translate-y-px"
+          >
+            <StatusDot tone="ok" live />
+            Open chat
+            <ArrowRight className="size-4 text-ok/90 transition-transform duration-300 group-hover/btn:translate-x-0.5" />
+          </a>
           <Button variant="secondary" size="lg" onClick={() => scrollToId('how')} iconRight={<ArrowDown className="size-3.5 text-muted" />}>
             How it works
           </Button>
