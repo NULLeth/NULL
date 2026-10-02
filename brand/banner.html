@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>NULL — X banner</title>
+<style>
+  @font-face {
+    font-family: 'Geist';
+    src: url('../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: 'Geist Mono';
+    src: url('../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2') format('woff2-variations');
+    font-weight: 100 900;
+  }
+  :root {
+    --bg: #060607; --fg: #f1f1f3; --soft: #c9c9cf; --muted: #94949d; --dim: #64646d;
+    --eth: #8a98ff; --ok: #43d392; --line: rgb(255 255 255 / 0.12);
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body {
+    width: 1500px; height: 500px; overflow: hidden; position: relative;
+    font-family: 'Geist', system-ui, sans-serif; color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+    background-size: 50px 50px; background-position: -1px -1px;
+    mask-image: radial-gradient(ellipse 75% 85% at 55% 45%, #000 25%, transparent 80%);
+  }
+  #net { position: absolute; inset: 0; mask-image: linear-gradient(to right, transparent 30%, #000 70%); }
+  #orbit { position: absolute; left: 935px; top: -48px; width: 600px; height: 600px; overflow: visible; }
+  .copy { position: absolute; left: 96px; top: 62px; width: 820px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 12px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px 6px 6px;
+    background: rgb(10 10 12 / 0.7);
+    font: 500 13px/1 'Geist Mono', monospace; letter-spacing: 0.14em; color: var(--muted);
+  }
+  .pill b { font-weight: 500; color: var(--soft); background: rgb(255 255 255 / 0.07); border-radius: 999px; padding: 5px 10px; letter-spacing: 0.12em; }
+  h1 {
+    margin: 26px 0 0; font-weight: 500; font-size: 64px; line-height: 0.98; letter-spacing: -0.045em; color: var(--fg);
+  }
+  h1 span { color: var(--muted); }
+  .flow {
+    margin-top: 30px; display: flex; align-items: center; gap: 12px;
+    font: 500 13px/1 'Geist Mono', monospace; letter-spacing: 0.12em; color: var(--soft);
+  }
+  .flow i { font-style: normal; color: var(--dim); }
+  .flow .zk { color: var(--eth); }
+  .status {
+    margin-top: 16px; display: flex; gap: 26px;
+    font: 500 12px/1 'Geist Mono', monospace; letter-spacing: 0.14em; color: var(--dim);
+  }
+  .status em { font-style: normal; color: var(--ok); }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <svg id="net" viewBox="0 0 1500 500" width="1500" height="500"></svg>
+  <svg id="orbit" viewBox="0 0 600 600" fill="none"></svg>
+
+  <div class="copy">
+    <div class="pill"><b>zkAPI</b> PRIVATE ACCESS TO THE MACHINE ECONOMY</div>
+    <h1>Your identity shouldn't<br /><span>follow every request.</span></h1>
+    <div class="flow">
+      WALLET <i>→</i> PRIVATE DEPOSIT <i>→</i> <span class="zk">ZK PROOF</span> <i>→</i> TEMPORARY KEY <i>→</i> ANY API
+    </div>
+    <div class="status">
+      <span>PAYMENT IDENTITY <em>HIDDEN ✓</em></span>
+      <span>SESSION LINK <em>HIDDEN ✓</em></span>
+    </div>
+  </div>
+
+<script>
+  const ns = 'http://www.w3.org/2000/svg'
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(ns, tag)
+    for (const k in attrs) e.setAttribute(k, attrs[k])
+    parent.appendChild(e)
+    return e
+  }
+  // seeded PRNG so every render is identical
+  let seed = 0x6e756c6c
+  const rnd = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0
+    let t = seed
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+
+  // background network
+  const net = document.getElementById('net')
+  const nodes = Array.from({ length: 70 }, () => ({ x: 380 + Math.sqrt(rnd()) * 1150, y: rnd() * 500, hub: rnd() < 0.08 }))
+  for (let i = 0; i < nodes.length; i++)
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y)
+      if (d < 140) el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#fff', 'stroke-opacity': ((1 - d / 140) * 0.09).toFixed(3) }, net)
+    }
+  for (const n of nodes) el('circle', { cx: n.x, cy: n.y, r: n.hub ? 1.9 : 1.1, fill: '#fff', 'fill-opacity': n.hub ? 0.55 : 0.3 }, net)
+  // two packets mid-flight
+  for (const [i, t] of [[3, 0.6], [11, 0.35]]) {
+    const a = nodes[i], b = nodes.reduce((best, n) => (n !== a && Math.hypot(n.x - a.x, n.y - a.y) < Math.hypot(best.x - a.x, best.y - a.y) ? n : best), nodes[(i + 1) % nodes.length])
+    const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t
+    el('line', { x1: a.x, y1: a.y, x2: x, y2: y, stroke: '#8a98ff', 'stroke-opacity': 0.35 }, net)
+    el('circle', { cx: x, cy: y, r: 5, fill: '#8a98ff', 'fill-opacity': 0.16 }, net)
+    el('circle', { cx: x, cy: y, r: 1.8, fill: '#8a98ff' }, net)
+  }
+
+  // the ∅ orbit (same geometry as the site hero)
+  const o = document.getElementById('orbit')
+  const C = 300, R = 196
+  const polar = (r, deg) => ({ x: C + r * Math.cos((deg * Math.PI) / 180), y: C + r * Math.sin((deg * Math.PI) / 180) })
+  const defs = el('defs', {}, o)
+  const rg = el('radialGradient', { id: 'f', cx: '50%', cy: '50%', r: '50%' }, defs)
+  el('stop', { offset: '0%', 'stop-color': '#8a98ff', 'stop-opacity': 0.09 }, rg)
+  el('stop', { offset: '70%', 'stop-color': '#8a98ff', 'stop-opacity': 0 }, rg)
+  el('circle', { cx: C, cy: C, r: 260, fill: 'url(#f)' }, o)
+  el('circle', { cx: C, cy: C, r: 268, stroke: '#fff', 'stroke-opacity': 0.1, 'stroke-dasharray': '2 7' }, o)
+  el('circle', { cx: C, cy: C, r: 232, stroke: '#fff', 'stroke-opacity': 0.06, 'stroke-dasharray': '40 14 4 14' }, o)
+  el('circle', { cx: C, cy: C, r: R, stroke: '#fff', 'stroke-opacity': 0.12 }, o)
+  el('circle', { cx: C, cy: C, r: 112, stroke: '#fff', 'stroke-opacity': 0.2, 'stroke-width': 1.4 }, o)
+  const s1 = polar(268, 135), s2 = polar(268, -45)
+  el('line', { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, stroke: '#fff', 'stroke-opacity': 0.18, 'stroke-width': 1.4 }, o)
+  el('circle', { cx: C, cy: C, r: 3, fill: '#fff', 'fill-opacity': 0.6 }, o)
+  // proof packet on the slash, packet on the ring
+  const p1 = polar(150, -45)
+  el('circle', { cx: p1.x, cy: p1.y, r: 6.5, fill: '#43d392', 'fill-opacity': 0.16 }, o)
+  el('circle', { cx: p1.x, cy: p1.y, r: 2.6, fill: '#43d392' }, o)
+  const p2 = polar(R, -84)
+  el('circle', { cx: p2.x, cy: p2.y, r: 7, fill: '#8a98ff', 'fill-opacity': 0.16 }, o)
+  el('circle', { cx: p2.x, cy: p2.y, r: 2.6, fill: '#8a98ff' }, o)
+
+  const NODES = [
+    { a: 180, label: 'you', you: true },
+    { a: -150, label: 'anthropic/claude' },
+    { a: -112, label: 'openai/gpt' },
+    { a: 150, label: 'ethereum/mainnet' },
+    { a: 118, label: 'agent · SPECTRE' },
+    { a: -40 }, { a: 22 }, { a: 70 },
+  ]
+  for (const n of NODES) {
+    const p = polar(R, n.a)
+    el('circle', { cx: p.x, cy: p.y, r: 7, fill: '#060607', stroke: n.you ? '#8a98ff' : '#fff', 'stroke-opacity': n.you ? 0.45 : 0.12 }, o)
+    el('circle', { cx: p.x, cy: p.y, r: 2.3, fill: n.you ? '#8a98ff' : '#fff', 'fill-opacity': n.you ? 1 : 0.75 }, o)
+    if (n.label) {
+      const t = el('text', {
+        x: p.x - 14, y: p.y + 4, 'text-anchor': 'end', 'font-family': 'Geist Mono, monospace', 'font-size': 11.5,
+        'letter-spacing': '0.06em', fill: n.you ? 'rgb(138 152 255 / 0.9)' : 'rgb(255 255 255 / 0.4)',
+      }, o)
+      t.textContent = n.label
+    }
+  }
+</script>
+</body>
+</html>

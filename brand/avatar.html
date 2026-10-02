@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>NULL — X avatar</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #060607; }
+  body { width: 400px; height: 400px; overflow: hidden; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<!-- 400×400 CSS px; render at 2.5× → 1000×1000. X crops to a circle: keep the mark inside r≈150. -->
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#8a98ff" stop-opacity="0.22" />
+      <stop offset="45%" stop-color="#8a98ff" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#8a98ff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="gridfade" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="1" />
+      <stop offset="75%" stop-color="#fff" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse" x="12.5" y="12.5">
+      <path d="M25 0H0V25" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1" />
+    </pattern>
+    <mask id="gm"><rect width="400" height="400" fill="url(#gridfade)" /></mask>
+  </defs>
+
+  <rect width="400" height="400" fill="#060607" />
+  <rect width="400" height="400" fill="url(#grid)" mask="url(#gm)" />
+  <circle cx="200" cy="200" r="190" fill="url(#glow)" />
+
+  <!-- orbit -->
+  <circle cx="200" cy="200" r="168" fill="none" stroke="#ffffff" stroke-opacity="0.11" stroke-width="1.2" stroke-dasharray="1.5 6" />
+  <g id="nodes"></g>
+
+  <!-- the mark: ∅ -->
+  <circle cx="200" cy="200" r="96" fill="none" stroke="#f1f1f3" stroke-width="25" />
+  <line x1="109.9" y1="290.1" x2="290.1" y2="109.9" stroke="#f1f1f3" stroke-width="25" stroke-linecap="round" />
+</svg>
+<script>
+  // a few service nodes on the orbit, one in ETH blue
+  const g = document.getElementById('nodes')
+  const ns = 'http://www.w3.org/2000/svg'
+  ;[[-118, false], [-28, false], [62, true], [158, false], [214, false]].forEach(([deg, eth]) => {
+    const t = (deg * Math.PI) / 180
+    const x = 200 + 168 * Math.cos(t), y = 200 + 168 * Math.sin(t)
+    const ring = document.createElementNS(ns, 'circle')
+    ring.setAttribute('cx', x); ring.setAttribute('cy', y); ring.setAttribute('r', 6.5)
+    ring.setAttribute('fill', '#060607'); ring.setAttribute('stroke', eth ? '#8a98ff' : '#ffffff')
+    ring.setAttribute('stroke-opacity', eth ? 0.6 : 0.16)
+    const dot = document.createElementNS(ns, 'circle')
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', 2.6)
+    dot.setAttribute('fill', eth ? '#8a98ff' : '#ffffff'); dot.setAttribute('fill-opacity', eth ? 1 : 0.7)
+    g.append(ring, dot)
+  })
+</script>
+</body>
+</html>
