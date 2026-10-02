@@ -2,6 +2,7 @@
 // soft typing ticks, a pulse under the problem, the arrival of ∅, and a tick per step.
 // Rendered only into the MP4 — nothing here ever plays through the speakers.
 
+import { CHAT_CUES, CHAT_DURATION } from './chat'
 import { HOW_CUES, HOW_DURATION } from './how'
 import { CUE, DURATION, typingTimes } from './launch'
 
@@ -195,6 +196,18 @@ export const howSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, HOW_CUES.receipt, 987.77, 0.1)
   hit(ctx, out, HOW_CUES.honest, 0.25, 120, 50, 0.4)
   arrival(ctx, out, HOW_CUES.end, 0.7)
+}
+
+/** NULL Chat promo: quiet bed, the logo, typing, a tick per step, a mark per point. */
+export const chatSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, CHAT_DURATION, [1.0, CHAT_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  const n = 39
+  for (let i = 0; i < n; i++) click(ctx, out, CHAT_CUES.typeStart + ((CHAT_CUES.typeEnd - CHAT_CUES.typeStart) * i) / n, 0.09, 5000 + i * 11)
+  tick(ctx, out, CHAT_CUES.send, 1318.51, 0.12)
+  CHAT_CUES.steps.forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66, 1318.51][i], 0.1))
+  CHAT_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, CHAT_CUES.end + 0.1, 0.7)
 }
 
 /** Renders a soundtrack, levelled so its loudest moment sits just under full scale. */
