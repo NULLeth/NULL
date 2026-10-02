@@ -11,10 +11,33 @@ import { networkSnapshot } from '../lib/network'
 import { estimatedHead } from '../protocol/responses'
 import { scrollToId } from '../state/ui'
 import { HeroTerminal } from './HeroTerminal'
+import { CopyAddress } from '../components/ui/CopyAddress'
+import { ArrowUpRight } from 'lucide-react'
 import { IS_LIVE } from '../config/mode'
 import { useLive } from '../live/LiveProvider'
 
 const ease = [0.22, 1, 0.36, 1] as const
+
+/** Token contract address, shown once PROJECT.token.ca is set. */
+function TokenBar() {
+  const { ca, ticker } = PROJECT.token
+  if (!ca) return null
+  const chart = `https://dexscreener.com/${ca.startsWith('0x') ? 'ethereum' : 'solana'}/${ca}`
+  return (
+    <div className="mt-6 flex w-fit max-w-full flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line-2 bg-panel/70 px-4 py-2.5 backdrop-blur">
+      <span className="font-mono text-[10.5px] tracking-[0.14em] text-dim">{ticker} · CA</span>
+      <CopyAddress value={ca} head={80} tail={0} label="contract address" className="!text-[12.5px] !text-fg [overflow-wrap:anywhere] text-left" />
+      <a
+        href={chart}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 font-mono text-[10.5px] tracking-[0.14em] text-muted transition-colors hover:text-fg"
+      >
+        CHART <ArrowUpRight className="size-3" />
+      </a>
+    </div>
+  )
+}
 
 function StatusBar() {
   const [now, setNow] = useState(Date.now())
@@ -122,6 +145,8 @@ export function Hero() {
             How it works
           </Button>
         </motion.div>
+
+        <TokenBar />
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}

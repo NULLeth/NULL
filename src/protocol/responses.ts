@@ -113,7 +113,7 @@ export function cannedSearch(query: string): SearchHit[] {
     },
     {
       title: 'Privacy and the machine economy',
-      url: 'null.network/research',
+      url: 'nullzk.com/research',
       snippet: 'Why autonomous agents need budgets that are separate from their operator’s identity.',
     },
   ]

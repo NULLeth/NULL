@@ -6,6 +6,8 @@ import { StatusDot } from '../components/ui/StatusDot'
 import { WalletButton } from '../components/WalletButton'
 import { scrollToId } from '../state/ui'
 import { IS_LIVE, otherModeHref } from '../config/mode'
+import { PROJECT } from '../config/project'
+import { XGlyph } from '../components/Logo'
 
 const LINKS = [
   { id: 'network', label: 'NETWORK' },
@@ -102,6 +104,16 @@ export function Nav() {
               }`}
             >
               {IS_LIVE ? 'LIVE' : 'DEMO'}
+            </a>
+            <a
+              href={PROJECT.links.x}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${PROJECT.xHandle} on X`}
+              title={`${PROJECT.xHandle} on X`}
+              className="inline-flex size-9 items-center justify-center rounded-md border border-line-2 text-soft transition-colors hover:border-line-3 hover:bg-white/[0.03] hover:text-fg"
+            >
+              <XGlyph className="size-3.5" />
             </a>
             <div className="hidden sm:block">
               <WalletButton />

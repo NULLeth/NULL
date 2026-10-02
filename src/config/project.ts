@@ -3,12 +3,21 @@
  */
 export const PROJECT = {
   name: 'NULL',
-  domain: 'null.network',
+  domain: 'nullzk.com',
   tagline: 'Private access to the machine economy.',
   secondary: 'Fund once. Access any API privately.',
   core: 'One private balance. Every API.',
 
   xHandle: '@NULL_zk',
+
+  /**
+   * Token contract address, shown in the hero once set. Leave empty to hide.
+   * 0x… addresses link to the Ethereum chart, anything else is treated as Solana.
+   */
+  token: {
+    ticker: '$NULL' as string,
+    ca: '' as string,
+  },
 
   links: {
     x: 'https://x.com/NULL_zk',
