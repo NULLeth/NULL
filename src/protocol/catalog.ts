@@ -89,10 +89,15 @@ const CATALOG: ServiceInfo[] = [
 ]
 
 /**
- * In live mode only AI models are routed by the zkAPI mainnet deployment today
- * (via OpenRouter); the other routes are shown as coming soon.
+ * In live mode the zkAPI mainnet deployment routes AI models via OpenRouter, and
+ * web search rides on the same key (OpenRouter's web plugin, used in NULL Chat).
+ * RPC and media routes are shown as coming soon.
  */
-export const SERVICES: ServiceInfo[] = CATALOG.map((s) => (IS_LIVE && s.kind !== 'chat' ? { ...s, status: 'soon' } : s))
+export const SERVICES: ServiceInfo[] = CATALOG.map((s) => {
+  if (!IS_LIVE || s.kind === 'chat') return s
+  if (s.kind === 'search') return { ...s, vendor: 'OpenRouter web', latencyMs: 3500, description: 'Live web answers with sources, inside NULL Chat. No account attached.' }
+  return { ...s, status: 'soon' }
+})
 
 /** Further routes the network serves that the demo doesn't expose as cards. */
 export const MORE_ROUTES = ['Embeddings', 'Speech-to-text', 'Price feeds', 'IPFS pinning', 'Translation', 'Code sandbox']

@@ -13,6 +13,9 @@ export interface ChatMessage {
   model?: string
   ms?: number
   error?: string
+  /** answered with live web search */
+  web?: boolean
+  sources?: { url: string; title: string }[]
 }
 
 export interface Conversation {
@@ -24,6 +27,8 @@ export interface Conversation {
   updatedAt: number
   /** ETH charged so far (settled usage) */
   spentEth: number
+  /** web search on for this chat's next messages */
+  web?: boolean
 }
 
 function load(): Conversation[] {

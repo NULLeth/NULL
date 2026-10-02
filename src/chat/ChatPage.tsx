@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, ChevronDown, Menu, Plus, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Globe, Menu, Plus, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -13,13 +13,14 @@ import { ago, fmtEth, fmtUsd } from '../lib/format'
 import { useNow } from '../lib/hooks'
 import { randHex } from '../lib/random'
 import { errorMessage } from '../live/client'
+import type { Source } from '../live/stream'
 import { useLive } from '../live/LiveProvider'
 import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { sendDemo, sendLive, type WireMessage } from './engine'
 import { Markdown } from './Markdown'
-import { newConversation, newMessage, titleFrom, useConversations, type Conversation } from './store'
+import { newConversation, newMessage, titleFrom, useConversations, type ChatMessage, type Conversation } from './store'
 
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
@@ -30,6 +31,29 @@ const SUGGESTIONS = [
   'Summarize EIP-7702 in five bullet points.',
   'Write a haiku about private payments.',
 ]
+const WEB_SUGGESTIONS = [
+  'What happened on Ethereum this week?',
+  'Latest news about zkAPI and private payments.',
+  'What are ETH gas fees like right now?',
+  'Top AI headlines today, with sources.',
+]
+
+/** `/chat?web=1` opens a new chat with web search already on. */
+const WEB_FROM_URL = new URLSearchParams(window.location.search).get('web') === '1'
+
+const host = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+/** Adds citations we haven't seen yet (streams can repeat them). */
+const mergeSources = (have: Source[], add: Source[]) => {
+  const seen = new Set(have.map((s) => s.url))
+  return [...have, ...add.filter((s) => !seen.has(s.url) && seen.add(s.url))]
+}
 
 // ─── sidebar ─────────────────────────────────────────────────────────────────
 
@@ -136,16 +160,18 @@ function Sidebar({
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
-function EmptyState({ onPick, disabled }: { onPick: (s: string) => void; disabled: boolean }) {
+function EmptyState({ onPick, disabled, web }: { onPick: (s: string) => void; disabled: boolean; web: boolean }) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
       <LogoMark className="size-11 text-fg" />
-      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">Ask privately.</h1>
+      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">{web ? 'Search privately.' : 'Ask privately.'}</h1>
       <p className="mt-3 max-w-[480px] text-[14.5px] leading-relaxed text-muted">
-        Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.
+        {web
+          ? 'Web search is on: answers use live results and list their sources. Paid from your private balance like every request.'
+          : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
       </p>
       <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s) => (
+        {(web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
           <button
             key={s}
             type="button"
@@ -155,6 +181,32 @@ function EmptyState({ onPick, disabled }: { onPick: (s: string) => void; disable
           >
             {s}
           </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Sources({ list }: { list: Source[] }) {
+  return (
+    <div className="mt-4">
+      <div className="mb-2 font-mono text-[10px] tracking-[0.14em] text-dim">SOURCES</div>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {list.map((s, i) => (
+          <a
+            key={s.url}
+            href={s.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            title={s.title}
+            className="flex min-w-0 items-start gap-2.5 rounded-md border border-line-2 bg-panel/60 px-3 py-2 transition-colors hover:border-line-3"
+          >
+            <span className="mt-px font-mono text-[10.5px] text-dim">{i + 1}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12.5px] text-soft">{s.title}</span>
+              <span className="block truncate font-mono text-[10.5px] text-dim">{host(s.url)}</span>
+            </span>
+          </a>
         ))}
       </div>
     </div>
@@ -183,6 +235,7 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                 </div>
               )}
               {streamingId === m.id && m.content && <span className="ml-0.5 inline-block w-[7px] animate-blink text-eth">▍</span>}
+              {!!m.sources?.length && <Sources list={m.sources} />}
               {m.error && (
                 <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-bad/25 bg-bad/[0.05] px-3 py-2 text-[13px] text-bad/90">
                   {m.error}
@@ -196,6 +249,12 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
               {streamingId !== m.id && !m.error && (
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-dim">
                   <span>{modelLabel(m.model ?? conv.model)}</span>
+                  {m.web && (
+                    <span className="inline-flex items-center gap-1">
+                      <Globe className="size-3" />
+                      web
+                    </span>
+                  )}
                   {m.ms != null && <span>{(m.ms / 1000).toFixed(1)}s</span>}
                   <Tooltip content="Paid from your private balance with a zero-knowledge proof. The provider never saw your wallet.">
                     <span className="text-ok/80">paid by proof ✓</span>
@@ -218,8 +277,8 @@ export function ChatPage() {
   const account = useAccount()
   const { spend } = useNull()
   const { fund } = useActions()
-  const [activeId, setActiveId] = useState<string>(() => list[0]?.id ?? '')
-  const [draft, setDraft] = useState<Conversation>(() => newConversation(DEFAULT_MODEL))
+  const [activeId, setActiveId] = useState<string>(() => (WEB_FROM_URL ? '' : (list[0]?.id ?? '')))
+  const [draft, setDraft] = useState<Conversation>(() => ({ ...newConversation(DEFAULT_MODEL), web: WEB_FROM_URL }))
   const [input, setInput] = useState('')
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -283,7 +342,7 @@ export function ChatPage() {
 
   const run = useCallback(
     async (target: Conversation, history: WireMessage[]) => {
-      const reply = newMessage('assistant', '', { model: target.model })
+      const reply = newMessage('assistant', '', { model: target.model, ...(target.web ? { web: true } : {}) })
       const withReply = { ...target, messages: [...target.messages, reply], updatedAt: Date.now() }
       upsert(withReply)
       setActiveId(withReply.id)
@@ -293,7 +352,8 @@ export function ChatPage() {
       abort.current = ctrl
       const t0 = performance.now()
       let text = ''
-      const patch = (fields: Partial<typeof reply>) =>
+      let sources: Source[] = []
+      const patch = (fields: Partial<ChatMessage>) =>
         update(withReply.id, (c) => ({ ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === reply.id ? { ...m, ...fields } : m)) }))
       const hooks = {
         signal: ctrl.signal,
@@ -301,6 +361,13 @@ export function ChatPage() {
         onDelta: (d: string) => {
           text += d
           patch({ content: text })
+        },
+        web: !!target.web,
+        onSources: (s: Source[]) => {
+          const next = mergeSources(sources, s)
+          if (next.length === sources.length) return
+          sources = next
+          patch({ sources })
         },
       }
       try {
@@ -314,6 +381,7 @@ export function ChatPage() {
           await sendDemo(target.model, history, hooks)
           const svc = target.model.includes('gpt') ? 'gpt' : target.model.includes('auto') ? 'openrouter' : 'claude'
           spend(svc, 0.012, randHex(32), `chat · ${modelLabel(target.model)}`)
+          if (target.web) spend('web-search', 0.0021, randHex(32), `web search · ${sources.length} sources`)
         }
         patch({ ms: performance.now() - t0 })
       } catch (err) {
@@ -350,7 +418,7 @@ export function ChatPage() {
 
   const startNew = () => {
     if (sending) return
-    setDraft(newConversation(conv.model))
+    setDraft({ ...newConversation(conv.model), web: !!conv.web })
     setActiveId('')
     setDrawer(false)
     setTimeout(() => textarea.current?.focus(), 50)
@@ -365,6 +433,13 @@ export function ChatPage() {
   const setModel = (model: string) => {
     if (conv.messages.length) update(conv.id, (c) => ({ ...c, model }))
     else setDraft((d) => ({ ...d, model }))
+  }
+
+  const toggleWeb = () => {
+    const web = !conv.web
+    if (conv.messages.length) update(conv.id, (c) => ({ ...c, web }))
+    else setDraft((d) => ({ ...d, web }))
+    textarea.current?.focus()
   }
 
   const keyOpen = IS_LIVE ? !!live?.pendingRequest || !!keyOwner.current : false
@@ -460,7 +535,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -485,6 +560,21 @@ export function ChatPage() {
               </div>
             )}
             <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">
+              <Tooltip content={conv.web ? 'Web search is on: answers use live results and list sources. Adds a small search fee per message.' : 'Turn on web search for live results with sources.'}>
+                <button
+                  type="button"
+                  onClick={toggleWeb}
+                  disabled={sending}
+                  aria-pressed={!!conv.web}
+                  aria-label="Web search"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
+                    conv.web ? 'border-eth/40 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <Globe className="size-3.5" />
+                  <span className="hidden sm:inline">WEB</span>
+                </button>
+              </Tooltip>
               <textarea
                 ref={textarea}
                 value={input}
@@ -499,7 +589,9 @@ export function ChatPage() {
                 disabled={!canSend}
                 placeholder={
                   canSend
-                    ? 'Ask privately…'
+                    ? conv.web
+                      ? 'Search the web privately…'
+                      : 'Ask privately…'
                     : IS_LIVE && account.status === 'loading'
                       ? 'Connecting to zkAPI…'
                       : IS_LIVE && account.status === 'error'
@@ -525,7 +617,8 @@ export function ChatPage() {
               )}
             </div>
             <p className="mt-2 text-center font-mono text-[10px] leading-relaxed tracking-[0.04em] text-dim">
-              <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt · your IP is visible to OpenRouter (use Tor or a VPN)
+              <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt
+              {conv.web ? ' · search queries go to the search provider via OpenRouter' : ''} · your IP is visible to OpenRouter (use Tor or a VPN)
             </p>
           </div>
         </div>

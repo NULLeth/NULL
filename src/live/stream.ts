@@ -1,5 +1,28 @@
-/** Reads an OpenAI-style SSE stream and calls onDelta with each text chunk. */
-export async function readStream(res: Response, onDelta: (t: string) => void, signal?: AbortSignal) {
+export interface Source {
+  url: string
+  title: string
+}
+
+interface Annotation {
+  type?: string
+  url_citation?: { url?: string; title?: string }
+}
+
+/** Web-search citations (OpenRouter `annotations`), de-duplicated by URL. */
+function sourcesFrom(list: Annotation[] | undefined): Source[] {
+  const out: Source[] = []
+  for (const a of list ?? []) {
+    const url = a.url_citation?.url
+    if (a.type === 'url_citation' && url && /^https?:\/\//.test(url)) out.push({ url, title: a.url_citation?.title || url })
+  }
+  return out
+}
+
+/**
+ * Reads an OpenAI-style SSE stream: onDelta gets each text chunk, onSources gets
+ * any web-search citations as they arrive.
+ */
+export async function readStream(res: Response, onDelta: (t: string) => void, signal?: AbortSignal, onSources?: (s: Source[]) => void) {
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let buf = ''
@@ -19,10 +42,16 @@ export async function readStream(res: Response, onDelta: (t: string) => void, si
       const data = line.slice(5).trim()
       if (data === '[DONE]') return
       try {
-        const json = JSON.parse(data) as { choices?: { delta?: { content?: string } }[]; error?: { message?: string } }
+        const json = JSON.parse(data) as {
+          choices?: { delta?: { content?: string; annotations?: Annotation[] }; message?: { annotations?: Annotation[] } }[]
+          error?: { message?: string }
+        }
         if (json.error) throw new Error(json.error.message ?? 'Provider error')
-        const t = json.choices?.[0]?.delta?.content
+        const choice = json.choices?.[0]
+        const t = choice?.delta?.content
         if (t) onDelta(t)
+        const found = sourcesFrom(choice?.delta?.annotations ?? choice?.message?.annotations)
+        if (found.length && onSources) onSources(found)
       } catch (e) {
         if (e instanceof SyntaxError) continue
         throw e

@@ -2,7 +2,8 @@ import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
 import { LIVE } from '../config/mode'
 import { sleep } from '../lib/random'
 import { cannedChat } from '../protocol/responses'
-import { providerError, readStream } from '../live/stream'
+import { cannedSearch } from '../protocol/responses'
+import { providerError, readStream, type Source } from '../live/stream'
 
 export interface WireMessage {
   role: 'user' | 'assistant' | 'system'
@@ -13,8 +14,15 @@ export interface SendHooks {
   /** short status line while the request is being authorized / streamed */
   onPhase: (text: string) => void
   onDelta: (text: string) => void
+  /** web-search citations, when web search is on */
+  onSources?: (s: Source[]) => void
   signal?: AbortSignal
+  /** answer with live web results (OpenRouter web plugin) */
+  web?: boolean
 }
+
+/** OpenRouter's web plugin: a handful of results, engine picked by OpenRouter. */
+const WEB_PLUGIN = { id: 'web', max_results: 5 }
 
 const SYSTEM: WireMessage = {
   role: 'system',
@@ -49,13 +57,13 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
   }
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    hooks.onPhase('Routing privately…')
+    hooks.onPhase(hooks.web ? 'Searching the web privately…' : 'Routing privately…')
     let res: Response
     try {
       res = await fetch(`${access.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: access.headers,
-        body: JSON.stringify({ model, stream: true, messages: [SYSTEM, ...history] }),
+        body: JSON.stringify({ model, stream: true, messages: [SYSTEM, ...history], ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}) }),
         signal: hooks.signal,
       })
     } catch (e) {
@@ -73,7 +81,7 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
     try {
       if (!res.ok || !res.body) throw new Error(await providerError(res))
       hooks.onPhase('')
-      await readStream(res, hooks.onDelta, hooks.signal)
+      await readStream(res, hooks.onDelta, hooks.signal, hooks.onSources)
       return
     } finally {
       access.release()
@@ -88,9 +96,10 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   await sleep(650)
   hooks.onPhase('Request authorized…')
   await sleep(350)
-  hooks.onPhase('Routing privately…')
-  await sleep(450)
+  hooks.onPhase(hooks.web ? 'Searching the web privately…' : 'Routing privately…')
+  await sleep(hooks.web ? 900 : 450)
   hooks.onPhase('')
+  if (hooks.web) hooks.onSources?.(cannedSearch(last).filter((h) => !h.url.startsWith('nullzk.com')).map((h) => ({ url: `https://${h.url}`, title: h.title })))
   const text = cannedChat(last, model)
   for (let i = 0; i < text.length; ) {
     if (hooks.signal?.aborted) return
