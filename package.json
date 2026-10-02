@@ -26,8 +26,10 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "esbuild": "^0.28.2",
+    "mp4-muxer": "^5.2.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2"
+    "vite": "^8.3.2",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

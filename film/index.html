@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>NULL · launch film</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #060607;
+        color: #f1f1f3;
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 28px 24px;
+      }
+      h1 {
+        font: 600 15px/1 ui-monospace, Consolas, monospace;
+        letter-spacing: 0.24em;
+        margin: 0 0 6px;
+      }
+      p {
+        color: #94949d;
+        margin: 0 0 18px;
+        max-width: 760px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      button {
+        font: 600 12px/1 ui-monospace, Consolas, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #f1f1f3;
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 6px;
+        padding: 11px 14px;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #f1f1f3;
+        color: #060607;
+        border-color: #f1f1f3;
+      }
+      button:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: wait;
+      }
+      input[type='range'] {
+        flex: 1;
+        min-width: 240px;
+        accent-color: #8a98ff;
+      }
+      #clock,
+      #status {
+        font-family: ui-monospace, Consolas, monospace;
+        color: #8a98ff;
+      }
+      #status {
+        min-height: 1.5em;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>NULL · LAUNCH FILM</h1>
+      <p>
+        38 s, 1920×1080, 60 fps, with sound. The preview plays silently. "Render MP4" draws every frame in this browser and
+        downloads NULL-launch.mp4 (use a recent Chrome or Edge; it takes a minute or two).
+      </p>
+      <div class="row">
+        <button id="play">Play preview</button>
+        <input id="time" type="range" min="0" max="38" step="0.01" value="13.6" />
+        <span id="clock"></span>
+      </div>
+      <div class="row">
+        <button id="render" class="primary">Render MP4</button>
+        <button id="png">Frame as PNG</button>
+      </div>
+      <div id="status"></div>
+      <canvas id="stage" width="1920" height="1080"></canvas>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
