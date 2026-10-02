@@ -11,6 +11,8 @@ import { networkSnapshot } from '../lib/network'
 import { estimatedHead } from '../protocol/responses'
 import { scrollToId } from '../state/ui'
 import { HeroTerminal } from './HeroTerminal'
+import { IS_LIVE } from '../config/mode'
+import { useLive } from '../live/LiveProvider'
 
 const ease = [0.22, 1, 0.36, 1] as const
 
@@ -20,19 +22,27 @@ function StatusBar() {
     const t = setInterval(() => setNow(Date.now()), 2600)
     return () => clearInterval(t)
   }, [])
+  const live = useLive()
   const snap = networkSnapshot(now)
-  const items = [
-    ['BLOCK', `#${fmtInt(estimatedHead(now))}`],
-    ['PRIVATE REQUESTS', fmtInt(snap.privateRequests)],
-    ['ANONYMITY SET', fmtInt(snap.anonymitySet)],
-    ['PROOF VERIFY', `${snap.verifierMs} ms`],
-  ]
+  const items = IS_LIVE
+    ? [
+        ['BLOCK', `#${fmtInt(estimatedHead(now))}`],
+        ['NOTES IN VAULT', live?.vault ? fmtInt(live.vault.notes) : '—'],
+        ['ETH IN VAULT', live?.vault ? live.vault.ethLocked.toFixed(3) : '—'],
+        ['PROTOCOL', 'zkAPI · groth16'],
+      ]
+    : [
+        ['BLOCK', `#${fmtInt(estimatedHead(now))}`],
+        ['PRIVATE REQUESTS', fmtInt(snap.privateRequests)],
+        ['ANONYMITY SET', fmtInt(snap.anonymitySet)],
+        ['PROOF VERIFY', `${snap.verifierMs} ms`],
+      ]
   return (
     <div className="relative z-10 border-t border-line bg-bg/60 backdrop-blur-sm">
       <div className="mx-auto flex h-11 max-w-[1240px] items-center gap-6 overflow-hidden px-4 font-mono text-[10.5px] tracking-[0.12em] sm:px-6 lg:px-8">
         <span className="inline-flex shrink-0 items-center gap-2 text-ok/90">
           <StatusDot tone="ok" live />
-          MAINNET · DEMO
+          {IS_LIVE ? 'MAINNET · LIVE' : 'MAINNET · DEMO'}
         </span>
         {items.map(([k, v], i) => (
           <span key={k} className={`shrink-0 whitespace-nowrap text-dim ${i > 1 ? 'hidden md:inline' : i > 0 ? 'hidden sm:inline' : ''}`}>

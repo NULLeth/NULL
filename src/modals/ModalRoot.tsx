@@ -8,6 +8,9 @@ import { DocsModal } from './DocsModal'
 import { FundModal } from './FundModal'
 import { PlaygroundModal } from './PlaygroundModal'
 import { WithdrawModal } from './WithdrawModal'
+import { IS_LIVE } from '../config/mode'
+import { LiveFundModal } from './live/LiveFundModal'
+import { LiveWithdrawModal } from './live/LiveWithdrawModal'
 
 export function ModalRoot() {
   const { modal } = useUi()
@@ -15,8 +18,8 @@ export function ModalRoot() {
   return (
     <>
       <ConnectModal open={name === 'connect'} then={modal?.name === 'connect' ? modal.then : undefined} />
-      <FundModal open={name === 'fund'} />
-      <WithdrawModal open={name === 'withdraw'} />
+      {IS_LIVE ? <LiveFundModal open={name === 'fund'} /> : <FundModal open={name === 'fund'} />}
+      {IS_LIVE ? <LiveWithdrawModal open={name === 'withdraw'} /> : <WithdrawModal open={name === 'withdraw'} />}
       <AgentModal open={name === 'agent'} />
       <PlaygroundModal open={name === 'playground'} initial={modal?.name === 'playground' ? modal.serviceId : 'claude'} />
       <DocsModal open={name === 'docs'} />

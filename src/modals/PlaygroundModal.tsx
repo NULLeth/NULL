@@ -15,6 +15,9 @@ import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
 import { PrivacyReport } from './PrivacyReport'
+import { IS_LIVE, LIVE, otherModeHref } from '../config/mode'
+import { useAccount } from '../live/useAccount'
+import { LiveChat } from './live/LiveChat'
 
 const STEPS: StepDef[] = [
   { id: 'prove', label: 'Generating proof...' },
@@ -63,6 +66,8 @@ function decodeRpc(method: RpcMethod, hex: string): string {
 
 export function PlaygroundModal({ open, initial }: { open: boolean; initial: ServiceId }) {
   const { state, spend } = useNull()
+  const account = useAccount()
+  const [liveReq, setLiveReq] = useState<string | null>(null)
   const ui = useUi()
   const { fund } = useActions()
   const [serviceId, setServiceId] = useState<ServiceId>(initial)
@@ -84,6 +89,7 @@ export function PlaygroundModal({ open, initial }: { open: boolean; initial: Ser
     setRes(null)
     setProof(null)
     setError(null)
+    setLiveReq(null)
     steps.reset()
   }
 
@@ -164,17 +170,40 @@ export function PlaygroundModal({ open, initial }: { open: boolean; initial: Ser
             <div className="min-w-0">
               <div className="font-mono text-[13px] tracking-[0.14em] text-fg">{svc.name.toUpperCase()}</div>
               <div className="font-mono text-[11px] text-dim">
-                {svc.route} · {fmtUsd(svc.priceUsd, { micro: true })} / {svc.unit.toLowerCase()}
+                {IS_LIVE && svc.kind === 'chat' ? `${LIVE.models[svc.id]} · metered` : `${svc.route} · ${fmtUsd(svc.priceUsd, { micro: true })} / ${svc.unit.toLowerCase()}`}
               </div>
             </div>
             <div className="ml-auto text-right font-mono text-[11px] text-dim">
               PAID FROM PRIVATE BALANCE
               <div className="text-[12.5px] text-soft">
-                <AnimatedNumber value={state.balanceEth} format={(v) => `${fmtEth(v)} ETH`} flash={false} />
+                <AnimatedNumber value={account.balanceEth} format={(v) => `${fmtEth(v, IS_LIVE ? 6 : 4)} ETH`} flash={false} />
               </div>
             </div>
           </div>
 
+          {IS_LIVE ? (
+            <div className="mt-5">
+              {svc.kind === 'chat' ? (
+                <LiveChat svc={svc} onDone={(id) => setLiveReq(id)} />
+              ) : (
+                <div className="rounded-md border border-line-2 px-4 py-4">
+                  <p className="text-[13.5px] leading-relaxed text-muted">
+                    {svc.name} isn&apos;t on the live zkAPI network yet. Today the mainnet deployment routes AI models through OpenRouter; data, RPC and media
+                    routes come next.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => reset('claude')}>
+                      Use Claude instead
+                    </Button>
+                    <a href={otherModeHref()} className="inline-flex h-8 items-center rounded-[6px] px-3 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted hover:text-fg">
+                      Try it in demo mode
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           {/* input */}
           <div className="mt-5">
             {svc.kind === 'chat' && (
@@ -351,10 +380,12 @@ export function PlaygroundModal({ open, initial }: { open: boolean; initial: Ser
               </div>
             </motion.div>
           )}
+          </>
+          )}
         </div>
 
         <aside className="border-t border-line bg-panel-2/60 lg:sticky lg:top-0 lg:-ml-px lg:self-start lg:border-l lg:border-t-0">
-          <PrivacyReport requestId={res?.requestId} active={phase === 'done'} />
+          <PrivacyReport requestId={IS_LIVE ? liveReq ?? undefined : res?.requestId} active={IS_LIVE ? !!liveReq : phase === 'done'} live={IS_LIVE} />
         </aside>
       </div>
     </Modal>

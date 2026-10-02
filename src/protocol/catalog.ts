@@ -1,6 +1,7 @@
+import { IS_LIVE } from '../config/mode'
 import type { ServiceGroup, ServiceId, ServiceInfo } from './types'
 
-export const SERVICES: ServiceInfo[] = [
+const CATALOG: ServiceInfo[] = [
   {
     id: 'claude',
     name: 'Claude',
@@ -86,6 +87,12 @@ export const SERVICES: ServiceInfo[] = [
     status: 'online',
   },
 ]
+
+/**
+ * In live mode only AI models are routed by the zkAPI mainnet deployment today
+ * (via OpenRouter); the other routes are shown as coming soon.
+ */
+export const SERVICES: ServiceInfo[] = CATALOG.map((s) => (IS_LIVE && s.kind !== 'chat' ? { ...s, status: 'soon' } : s))
 
 /** Further routes the network serves that the demo doesn't expose as cards. */
 export const MORE_ROUTES = ['Embeddings', 'Speech-to-text', 'Price feeds', 'IPFS pinning', 'Translation', 'Code sandbox']

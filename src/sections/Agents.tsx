@@ -10,6 +10,7 @@ import { fmtEth, fmtUsd } from '../lib/format'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
+import { IS_LIVE } from '../config/mode'
 
 function NewAgentTile({ onClick, tall }: { onClick: () => void; tall: boolean }) {
   return (
@@ -49,7 +50,11 @@ export function Agents() {
               Give machines a budget <span className="text-muted">without giving them your identity.</span>
             </>
           }
-          sub="Agents get a scoped private budget and an ephemeral spend key. They pay for models, search and chain data on their own, and nothing they do leads back to your wallet."
+          sub={
+            IS_LIVE
+              ? 'Preview: agent budgets are not live yet, so everything in this section is simulated. Agents get a scoped private budget and an ephemeral spend key, and nothing they do leads back to your wallet.'
+              : 'Agents get a scoped private budget and an ephemeral spend key. They pay for models, search and chain data on their own, and nothing they do leads back to your wallet.'
+          }
           aside={
             <Button variant="primary" onClick={createAgent} icon={<Plus className="size-4" />}>
               Create agent

@@ -4,6 +4,7 @@ import { Modal } from '../components/ui/Modal'
 import { Spinner } from '../components/ui/Spinner'
 import { connectInjected, demoWallet, discoverWallets, type DiscoveredWallet } from '../lib/wallet'
 import { shortAddr } from '../lib/format'
+import { IS_LIVE } from '../config/mode'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
 
@@ -109,7 +110,7 @@ export function ConnectModal({ open, then }: { open: boolean; then?: 'fund' | 'w
               key={w.uuid}
               icon={w.icon ? <img src={w.icon} alt="" className="size-5" /> : <Wallet className="size-4" strokeWidth={1.6} />}
               title={w.name}
-              sub="Browser wallet · nothing is signed in this demo"
+              sub={IS_LIVE ? 'Browser wallet · Ethereum mainnet' : 'Browser wallet · nothing is signed in this demo'}
               busy={busy === w.uuid}
               onClick={() => connectWith(w)}
             />
@@ -122,13 +123,15 @@ export function ConnectModal({ open, then }: { open: boolean; then?: 'fund' | 'w
               disabled
             />
           )}
-          <Row
-            icon={<FlaskConical className="size-4" strokeWidth={1.6} />}
-            title="Demo wallet"
-            tag="RECOMMENDED"
-            sub="Explore with a simulated address. No extension needed."
-            onClick={connectDemo}
-          />
+          {!IS_LIVE && (
+            <Row
+              icon={<FlaskConical className="size-4" strokeWidth={1.6} />}
+              title="Demo wallet"
+              tag="RECOMMENDED"
+              sub="Explore with a simulated address. No extension needed."
+              onClick={connectDemo}
+            />
+          )}
         </div>
         {error && <p className="mt-3 font-mono text-[11.5px] text-bad">{error}</p>}
         {!wallets.length && !scanning && (

@@ -12,7 +12,16 @@ const ITEMS: { k: string; v: string; level: Level; tip: string }[] = [
   { k: 'Network metadata', v: 'PARTIALLY VISIBLE', level: 'partial', tip: 'Requests exit through a NULL relay, but timing and size can still be observed.' },
 ]
 
-export function PrivacyReport({ requestId, active }: { requestId?: string; active: boolean }) {
+const LIVE_NETWORK = {
+  k: 'Network metadata',
+  v: 'YOUR IP VISIBLE TO OPENROUTER',
+  level: 'visible' as Level,
+  tip: 'In live mode your browser talks to OpenRouter directly, so it can see your IP address and timing. Use Tor or a VPN to hide it.',
+}
+
+export function PrivacyReport({ requestId, active, live = false }: { requestId?: string; active: boolean; live?: boolean }) {
+  const items = live ? ITEMS.map((it) => (it.k === 'Network metadata' ? LIVE_NETWORK : it)) : ITEMS
+  const score = live ? 3 : 4
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-3.5">
@@ -20,7 +29,7 @@ export function PrivacyReport({ requestId, active }: { requestId?: string; activ
         <span className="truncate font-mono text-[10.5px] text-dim">{requestId ?? 'per request'}</span>
       </div>
       <ul className="flex-1">
-        {ITEMS.map((it, i) => {
+        {items.map((it, i) => {
           const good = it.level === 'hidden' || it.level === 'none'
           return (
             <motion.li
@@ -54,7 +63,7 @@ export function PrivacyReport({ requestId, active }: { requestId?: string; activ
         <div className="flex items-baseline justify-between">
           <span className="label">PRIVACY SCORE</span>
           <span className="font-mono text-[15px] text-fg">
-            4 <span className="text-dim">/ 5</span>
+            {score} <span className="text-dim">/ 5</span>
           </span>
         </div>
         <div className="mt-2.5 grid grid-cols-5 gap-1">
@@ -62,9 +71,9 @@ export function PrivacyReport({ requestId, active }: { requestId?: string; activ
             <motion.span
               key={i}
               initial={false}
-              animate={{ opacity: active || i > 3 ? 1 : 0.4 }}
+              animate={{ opacity: active || i >= score ? 1 : 0.4 }}
               transition={{ delay: active ? 0.4 + i * 0.08 : 0 }}
-              className={`h-1 rounded-full ${i < 4 ? 'bg-ok/80' : 'bg-white/[0.08]'}`}
+              className={`h-1 rounded-full ${i < score ? 'bg-ok/80' : 'bg-white/[0.08]'}`}
             />
           ))}
         </div>

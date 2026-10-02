@@ -5,14 +5,16 @@
   "description": "NULL — private access to the machine economy. One private balance, every API.",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5600 --strictPort",
-    "build": "tsc --noEmit && vite build",
+    "dev": "node scripts/zkapi-assets.mjs && vite --port 5600 --strictPort",
+    "build": "node scripts/zkapi-assets.mjs && tsc --noEmit && vite build",
     "preview": "vite preview --port 5601 --strictPort",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "zkapi:assets": "node scripts/zkapi-assets.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@openanonymity/zkapi-browser-sdk": "github:OpenAnonymity/zkapi#045b444",
     "framer-motion": "^13.5.0",
     "lucide-react": "^1.50.0",
     "react": "^19.3.0",
@@ -23,6 +25,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"

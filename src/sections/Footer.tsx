@@ -4,6 +4,7 @@ import { EthGlyph, GithubGlyph, LogoMark, XGlyph } from '../components/Logo'
 import { StatusDot } from '../components/ui/StatusDot'
 import { PROJECT } from '../config/project'
 import { useUi } from '../state/ui'
+import { IS_LIVE } from '../config/mode'
 
 function FootLink({ href, onClick, icon, children }: { href?: string; onClick?: () => void; icon: ReactNode; children: ReactNode }) {
   const cls =
@@ -62,7 +63,7 @@ export function Footer() {
             </span>
           </span>
           <span>
-            {PROJECT.domain} · demo build · no transactions are broadcast
+            {IS_LIVE ? `${PROJECT.domain} · live on Ethereum mainnet via zkAPI · experimental` : `${PROJECT.domain} · demo build · no transactions are broadcast`}
           </span>
         </div>
       </div>

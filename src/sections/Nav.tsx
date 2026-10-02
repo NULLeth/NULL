@@ -5,6 +5,7 @@ import { Logo } from '../components/Logo'
 import { StatusDot } from '../components/ui/StatusDot'
 import { WalletButton } from '../components/WalletButton'
 import { scrollToId } from '../state/ui'
+import { IS_LIVE, otherModeHref } from '../config/mode'
 
 const LINKS = [
   { id: 'network', label: 'NETWORK' },
@@ -93,6 +94,15 @@ export function Nav() {
                 ONLINE
               </span>
             </div>
+            <a
+              href={otherModeHref()}
+              title={IS_LIVE ? 'Live on Ethereum mainnet. Click for the simulated demo.' : 'Simulated demo. Click for live mainnet.'}
+              className={`hidden rounded-full border px-2.5 py-1 font-mono text-[10px] tracking-[0.14em] transition-colors sm:inline-flex ${
+                IS_LIVE ? 'border-ok/30 text-ok/90 hover:border-ok/60' : 'border-line-2 text-muted hover:border-line-3 hover:text-fg'
+              }`}
+            >
+              {IS_LIVE ? 'LIVE' : 'DEMO'}
+            </a>
             <div className="hidden sm:block">
               <WalletButton />
             </div>

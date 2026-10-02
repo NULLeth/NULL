@@ -22,6 +22,39 @@ npm run build      # typecheck + production build into dist/
 
 "RESET DEMO" in the dashboard sidebar restores the seeded state.
 
+## Live mode (real zkAPI on Ethereum mainnet)
+
+The site runs in two modes:
+
+- **demo** (default): everything simulated, as described above.
+- **live**: the real [zkAPI](https://blog.ethereum.org/2026/10/01/introducing-zkapi) mainnet
+  deployment operated by Open Anonymity, via `@openanonymity/zkapi-browser-sdk`
+  (pinned to commit `045b444`). Real ETH deposits into the vault
+  [`0x4386…81fe`](https://etherscan.io/address/0x4386FDbdA35D995beB3BF8625118Ec5982ec81fe),
+  real proofs, real AI requests through OpenRouter, real withdrawals.
+
+Open live mode with `?live` (and demo with `?demo`), or make it the default by
+setting `VITE_NULL_MODE=live` at build time (Vercel → Settings → Environment Variables).
+
+What is live today: fund (one private balance per browser, no top-ups), Claude / GPT /
+OpenRouter chat, close & withdraw (mutual, with an emergency "escape" fallback).
+RPC, search and image routes show as SOON; agents stay a labelled preview.
+
+Build details:
+
+- `scripts/zkapi-assets.mjs` copies the SDK's pinned proving keys, WASM and worker into
+  `public/zkapi/` (runs automatically before `dev` and `build`). It also pins the OA verifier
+  URL that Open Anonymity's own production app uses, because the public SDK release still
+  ships the previous one and the live manifest rejects it. Remove that override once the SDK
+  release catches up.
+- The SDK talks to the deployment through the same-origin path `/zkapi-deployment/`, proxied
+  to `https://zkapi-mainnet.openanonymity.ai` by `vercel.json` (and `vite.config.ts` locally).
+- Product-side safety limits live in `src/config/mode.ts` (`LIVE.depositCapEth` = 0.05 ETH).
+
+Known protocol facts (read from the vault on 2026-10-02): notes expire after 30 days (anything
+not withdrawn can be claimed by the operator), the escape challenge period is 24 h, and the
+anonymity set was 35 notes. The protocol is experimental with a single-party trusted setup.
+
 ## Plugging in a real backend
 
 The UI only talks to two interfaces in `src/protocol/types.ts`:

@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button'
 import { FilterChips } from '../components/ui/FilterChips'
 import { fmtEth, fmtUsd } from '../lib/format'
 import { GROUP_LABEL, MORE_ROUTES, SERVICES, type ServiceGroup } from '../protocol'
+import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
@@ -60,8 +61,19 @@ export function AgentsView() {
   const { state, toggleAgent, recallAgent } = useNull()
   const { createAgent } = useActions()
   const { toast } = useUi()
+  const account = useAccount()
   return (
     <div>
+      {account.live && (
+        <div className="mb-4 rounded-lg border border-eth/20 bg-eth/[0.04] px-4 py-3 text-[13px] leading-relaxed text-muted">
+          <span className="font-mono text-[10.5px] tracking-[0.12em] text-eth">PREVIEW · </span>
+          Agent budgets aren&apos;t live yet; the agents below are simulated. Today an agent can already pay privately on mainnet through{' '}
+          <a href="https://github.com/OpenAnonymity/zkapi/tree/main/zkapi-clientd" target="_blank" rel="noreferrer" className="text-soft underline decoration-line-3 underline-offset-2 hover:text-fg">
+            zkapi-clientd
+          </a>
+          , a local OpenAI-compatible endpoint any agent framework can point at.
+        </div>
+      )}
       <ViewHeader title="MY AGENTS" sub="Each agent spends from its own private budget, with its own key.">
         <Button size="sm" variant="primary" onClick={createAgent} icon={<Plus className="size-3.5" />}>
           Deploy agent
@@ -134,17 +146,17 @@ export function AgentsView() {
 type ActFilter = 'all' | 'you' | 'agents' | 'funds'
 
 export function ActivityView() {
-  const { state } = useNull()
+  const account = useAccount()
   const [f, setF] = useState<ActFilter>('all')
   const events = useMemo(
     () =>
-      state.activity.filter((e) => {
+      account.events.filter((e) => {
         if (f === 'you') return e.kind === 'request'
         if (f === 'agents') return e.kind === 'agent' || e.kind === 'deploy' || e.kind === 'recall'
         if (f === 'funds') return e.kind === 'deposit' || e.kind === 'withdraw'
         return true
       }),
-    [state.activity, f],
+    [account.events, f],
   )
   return (
     <div>

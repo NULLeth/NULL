@@ -3,13 +3,15 @@ import { Check, ChevronDown, Copy, LogOut } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { shortAddr } from '../lib/format'
 import { chainName } from '../lib/wallet'
+import { useAccount } from '../live/useAccount'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
 import { Button } from './ui/Button'
 import { Identicon } from './ui/Identicon'
 
 export function WalletButton({ block = false }: { block?: boolean }) {
-  const { state, disconnectWallet } = useNull()
+  const { disconnectWallet } = useNull()
+  const account = useAccount()
   const { open, toast } = useUi()
   const [menu, setMenu] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -29,7 +31,7 @@ export function WalletButton({ block = false }: { block?: boolean }) {
     }
   }, [menu])
 
-  const w = state.wallet
+  const w = account.wallet
   if (!w) {
     return (
       <Button variant="secondary" size="sm" block={block} onClick={() => open({ name: 'connect' })} className="!h-9 !px-4">

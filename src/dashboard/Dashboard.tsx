@@ -12,6 +12,7 @@ import { estimatedHead } from '../protocol/responses'
 import { SERVICES } from '../protocol'
 import { useNull } from '../state/store'
 import { useUi, type DashTab } from '../state/ui'
+import { IS_LIVE } from '../config/mode'
 import { Overview } from './Overview'
 import { ActivityView, AgentsView, ServicesView } from './Views'
 
@@ -136,12 +137,20 @@ export function Dashboard() {
               <span className="truncate text-muted">{dashTab}</span>
             </div>
             <div className="ml-auto flex items-center gap-3">
-              <Tooltip content="The protocol backend is simulated in this build. Nothing is sent on-chain and responses come from a demo router.">
-                <span className="rounded-[4px] border border-warn/25 bg-warn/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-[0.12em] text-warn/90">
-                  DEMO MODE
-                </span>
-              </Tooltip>
-              <span className="hidden font-mono text-[11px] text-dim lg:inline">{state.sessionId}</span>
+              {IS_LIVE ? (
+                <Tooltip content="Real zkAPI on Ethereum mainnet via the Open Anonymity deployment. The protocol is experimental and unaudited: keep amounts small.">
+                  <span className="inline-flex items-center gap-1.5 rounded-[4px] border border-ok/25 bg-ok/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-[0.12em] text-ok/90">
+                    <StatusDot tone="ok" live /> MAINNET · LIVE
+                  </span>
+                </Tooltip>
+              ) : (
+                <Tooltip content="The protocol backend is simulated in this build. Nothing is sent on-chain and responses come from a demo router.">
+                  <span className="rounded-[4px] border border-warn/25 bg-warn/[0.06] px-1.5 py-0.5 font-mono text-[10px] tracking-[0.12em] text-warn/90">
+                    DEMO MODE
+                  </span>
+                </Tooltip>
+              )}
+              {!IS_LIVE && <span className="hidden font-mono text-[11px] text-dim lg:inline">{state.sessionId}</span>}
               <div className="hidden sm:block">
                 <WalletButton />
               </div>
@@ -181,6 +190,7 @@ export function Dashboard() {
                 <NetworkStatus />
                 <button
                   type="button"
+                  hidden={IS_LIVE}
                   onClick={() => {
                     reset()
                     setDashTab('overview')
@@ -214,6 +224,7 @@ export function Dashboard() {
                 <NetworkStatus />
                 <button
                   type="button"
+                  hidden={IS_LIVE}
                   onClick={() => {
                     reset()
                     setDashTab('overview')

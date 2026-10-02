@@ -1,4 +1,7 @@
 import { MotionConfig } from 'framer-motion'
+import { Fragment } from 'react'
+import { IS_LIVE } from './config/mode'
+import { LiveProvider } from './live/LiveProvider'
 import { Dashboard } from './dashboard/Dashboard'
 import { ModalRoot } from './modals/ModalRoot'
 import { About } from './sections/About'
@@ -12,10 +15,14 @@ import { Stats } from './sections/Stats'
 import { NullProvider } from './state/store'
 import { UiProvider } from './state/ui'
 
+/** Mounts the zkAPI SDK only when the page runs live. */
+const LiveOrNot = IS_LIVE ? LiveProvider : Fragment
+
 export function App() {
   return (
     <MotionConfig reducedMotion="user">
       <NullProvider>
+        <LiveOrNot>
         <UiProvider>
           <Nav />
           <main>
@@ -30,6 +37,7 @@ export function App() {
           <Footer />
           <ModalRoot />
         </UiProvider>
+        </LiveOrNot>
       </NullProvider>
     </MotionConfig>
   )

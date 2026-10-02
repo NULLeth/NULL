@@ -22,7 +22,7 @@ export interface ServiceInfo {
   /** router path, e.g. anthropic/claude */
   route: string
   latencyMs: number
-  status: 'online' | 'degraded'
+  status: 'online' | 'degraded' | 'soon'
 }
 
 export type StepPhase = 'start' | 'done'

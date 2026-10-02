@@ -1,4 +1,5 @@
 import { ArrowRight } from 'lucide-react'
+import { IS_LIVE } from '../config/mode'
 import type { ServiceInfo } from '../protocol'
 import { fmtUsd } from '../lib/format'
 import { PrivacyIndicator } from './PrivacyIndicator'
@@ -7,6 +8,14 @@ import { Button } from './ui/Button'
 import { StatusDot } from './ui/StatusDot'
 
 function Status({ status }: { status: ServiceInfo['status'] }) {
+  if (status === 'soon') {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.12em] text-dim">
+        <StatusDot tone="dim" />
+        SOON
+      </span>
+    )
+  }
   const ok = status === 'online'
   return (
     <span className={`inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.12em] ${ok ? 'text-ok/90' : 'text-warn'}`}>
@@ -17,6 +26,13 @@ function Status({ status }: { status: ServiceInfo['status'] }) {
 }
 
 export function Price({ svc, className = '' }: { svc: ServiceInfo; className?: string }) {
+  if (IS_LIVE && svc.kind === 'chat') {
+    return (
+      <span className={`font-mono text-[13px] text-fg tnum ${className}`}>
+        METERED<span className="text-dim"> / TOKEN</span>
+      </span>
+    )
+  }
   return (
     <span className={`font-mono text-[13px] text-fg tnum ${className}`}>
       {fmtUsd(svc.priceUsd, { micro: true })}

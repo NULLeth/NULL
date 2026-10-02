@@ -18,7 +18,9 @@ export function SpendBreakdown({ events }: { events: ActivityEvent[] }) {
       if (e.kind === 'agent') r.agents += 1
       acc.set(e.serviceId, r)
     }
-    return SERVICES.map((s) => ({ svc: s, ...(acc.get(s.id) ?? { usd: 0, n: 0, agents: 0 }) })).sort((a, b) => b.usd - a.usd)
+    return SERVICES.filter((s) => s.status !== 'soon')
+      .map((s) => ({ svc: s, ...(acc.get(s.id) ?? { usd: 0, n: 0, agents: 0 }) }))
+      .sort((a, b) => b.usd - a.usd)
   }, [events])
 
   const max = Math.max(...rows.map((r) => r.usd), 0.0001)
