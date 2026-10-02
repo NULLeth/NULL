@@ -8,6 +8,7 @@ import { fmtEth, fmtUsd } from '../../lib/format'
 import { randId } from '../../lib/random'
 import { errorMessage } from '../../live/client'
 import { useLive } from '../../live/LiveProvider'
+import { readStream } from '../../live/stream'
 import type { ServiceInfo } from '../../protocol'
 import { useUi } from '../../state/ui'
 
@@ -19,35 +20,6 @@ const STEPS: StepDef[] = [
 ]
 
 const SUGGESTIONS = ['Explain Ethereum blobs in simple terms.', 'What does a nullifier do?', 'Summarize EIP-7702.', 'Write a haiku about private payments.']
-
-/** Reads an OpenAI-style SSE stream and calls onDelta with each text chunk. */
-async function readStream(res: Response, onDelta: (t: string) => void) {
-  const reader = res.body!.getReader()
-  const decoder = new TextDecoder()
-  let buf = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buf += decoder.decode(value, { stream: true })
-    let nl: number
-    while ((nl = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, nl).trim()
-      buf = buf.slice(nl + 1)
-      if (!line.startsWith('data:')) continue
-      const data = line.slice(5).trim()
-      if (data === '[DONE]') return
-      try {
-        const json = JSON.parse(data) as { choices?: { delta?: { content?: string } }[]; error?: { message?: string } }
-        if (json.error) throw new Error(json.error.message ?? 'Provider error')
-        const t = json.choices?.[0]?.delta?.content
-        if (t) onDelta(t)
-      } catch (e) {
-        if (e instanceof SyntaxError) continue
-        throw e
-      }
-    }
-  }
-}
 
 /** Real private chat through zkAPI: proof → short-lived key → OpenRouter, straight from the browser. */
 export function LiveChat({ svc, onDone }: { svc: ServiceInfo; onDone: (requestId: string) => void }) {

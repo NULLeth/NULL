@@ -71,6 +71,13 @@ export function Nav() {
           </button>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+            <a
+              href="/chat"
+              className="relative mr-1 inline-flex items-center gap-1.5 rounded-md border border-line-2 px-3 py-1.5 font-mono text-[11px] tracking-[0.14em] text-fg transition-colors hover:border-line-3 hover:bg-white/[0.03]"
+            >
+              <StatusDot tone="ok" live />
+              CHAT
+            </a>
             {LINKS.map((l) => (
               <button
                 key={l.id}
@@ -146,6 +153,12 @@ export function Nav() {
               className="flex h-full flex-col px-4 pb-8 pt-4"
               aria-label="Mobile"
             >
+              <a href="/chat" className="flex items-center justify-between border-b border-line py-4 font-mono text-[13px] tracking-[0.16em] text-fg">
+                NULL CHAT
+                <span className="inline-flex items-center gap-1.5 text-[10px] text-ok/90">
+                  <StatusDot tone="ok" live /> LIVE
+                </span>
+              </a>
               {LINKS.map((l, i) => (
                 <motion.button
                   key={l.id}

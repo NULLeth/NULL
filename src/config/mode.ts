@@ -47,6 +47,13 @@ export const LIVE = {
   /** Above this share of the deposit, the fund dialog warns that gas is expensive. */
   feeWarnShare: 0.2,
   operator: 'Open Anonymity',
+  /** Models offered in NULL Chat (OpenRouter ids). */
+  chatModels: [
+    { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5' },
+    { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
+    { id: 'openai/gpt-6.1-sol', label: 'GPT-6.1' },
+    { id: 'openrouter/auto', label: 'Auto · OpenRouter' },
+  ],
   models: {
     claude: 'anthropic/claude-sonnet-5.5',
     gpt: 'openai/gpt-6.1-sol',
