@@ -6,12 +6,17 @@
 import '@fontsource-variable/geist'
 import '@fontsource-variable/geist-mono'
 import { renderFilm } from './export'
-import { FILMS } from './films'
+import { statsSound } from './audio'
+import { FILMS, type Film } from './films'
+import { makeStatsFilm } from './stats'
+import { fetchZkStats } from '../src/studio/stats'
 import { MONO, SANS } from './kit'
 
 const params = new URLSearchParams(location.search)
-const filmName = params.get('film') && FILMS[params.get('film')!] ? params.get('film')! : 'launch'
-const film = FILMS[filmName]
+const wanted = params.get('film') ?? 'launch'
+const filmName = wanted === 'stats' || FILMS[wanted] ? wanted : 'launch'
+// the stats film needs live numbers first; everything else is static
+const film: Film = filmName === 'stats' ? makeStatsFilm(await fetchZkStats(), statsSound) : FILMS[filmName]
 const stage = document.getElementById('stage') as HTMLCanvasElement
 const status = document.getElementById('status') as HTMLDivElement
 const slider = document.getElementById('time') as HTMLInputElement

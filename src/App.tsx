@@ -1,5 +1,5 @@
 import { MotionConfig } from 'framer-motion'
-import { Fragment } from 'react'
+import { Fragment, Suspense, lazy } from 'react'
 import { IS_LIVE } from './config/mode'
 import { LiveProvider } from './live/LiveProvider'
 import { ChatPage } from './chat/ChatPage'
@@ -19,9 +19,20 @@ import { UiProvider } from './state/ui'
 /** Mounts the zkAPI SDK only when the page runs live. */
 const LiveOrNot = IS_LIVE ? LiveProvider : Fragment
 
-const IS_CHAT = (globalThis.location?.pathname ?? '/').replace(/\/+$/, '').toLowerCase() === '/chat'
+const PATH = (globalThis.location?.pathname ?? '/').replace(/\/+$/, '').toLowerCase()
+const IS_CHAT = PATH === '/chat'
+const IS_STUDIO = PATH === '/studio'
+/** Studio is a private tool page; it and the film code load only on /studio. */
+const StudioPage = lazy(() => import('./studio/StudioPage'))
 
 export function App() {
+  if (IS_STUDIO) {
+    return (
+      <Suspense fallback={<div className="min-h-[100dvh] bg-bg" />}>
+        <StudioPage />
+      </Suspense>
+    )
+  }
   return (
     <MotionConfig reducedMotion="user">
       <NullProvider>

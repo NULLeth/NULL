@@ -210,6 +210,15 @@ export const chatSound: Soundtrack = (ctx, out) => {
   arrival(ctx, out, CHAT_CUES.end + 0.1, 0.7)
 }
 
+/** Stats update: the logo, one tick per number, a soft hit for the closing line. */
+export const statsSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, 16, [1.0, 12.4])
+  arrival(ctx, out, 1.0, 0.5)
+  ;[3.3, 3.8, 4.3, 4.8].forEach((at, i) => tick(ctx, out, at, [880, 987.77, 1174.66, 1318.51][i], 0.11))
+  sweep(ctx, out, 4.4, 8.4, 300, 2600, 0.05)
+  arrival(ctx, out, 12.5, 0.65)
+}
+
 /** Renders a soundtrack, levelled so its loudest moment sits just under full scale. */
 export async function renderSound(sound: Soundtrack, duration: number): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, Math.ceil(duration * SAMPLE_RATE), SAMPLE_RATE)

@@ -17,6 +17,10 @@
     {
       "source": "/chat",
       "destination": "/index.html"
+    },
+    {
+      "source": "/studio",
+      "destination": "/index.html"
     }
   ]
 }
