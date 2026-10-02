@@ -71,6 +71,20 @@
       #status {
         min-height: 1.5em;
       }
+      .films a {
+        font: 600 12px/1 ui-monospace, Consolas, monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #94949d;
+        text-decoration: none;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        padding: 9px 14px;
+      }
+      .films a.on {
+        color: #f1f1f3;
+        border-color: #8a98ff;
+      }
       canvas {
         display: block;
         width: 100%;
@@ -85,9 +99,13 @@
     <main>
       <h1>NULL · LAUNCH FILM</h1>
       <p>
-        38 s, 1920×1080, 60 fps, with sound. The preview plays silently. "Render MP4" draws every frame in this browser and
-        downloads NULL-launch.mp4 (use a recent Chrome or Edge; it takes a minute or two).
+        1920×1080, 60 fps, with sound. The preview plays silently. "Render MP4" draws every frame in this browser and
+        downloads the MP4 (use a recent Chrome or Edge; it takes a minute or two).
       </p>
+      <div class="row films">
+        <a data-film="launch" href="?film=launch">Launch film · 38 s</a>
+        <a data-film="how" href="?film=how">How it works · 61 s</a>
+      </div>
       <div class="row">
         <button id="play">Play preview</button>
         <input id="time" type="range" min="0" max="38" step="0.01" value="13.6" />

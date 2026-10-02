@@ -2,6 +2,7 @@
 // soft typing ticks, a pulse under the problem, the arrival of ∅, and a tick per step.
 // Rendered only into the MP4 — nothing here ever plays through the speakers.
 
+import { HOW_CUES, HOW_DURATION } from './how'
 import { CUE, DURATION, typingTimes } from './launch'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
@@ -172,6 +173,28 @@ export const launchSound: Soundtrack = (ctx, out) => {
 
   // 6 · end card
   arrival(ctx, out, CUE.end + 0.2, 0.75)
+}
+
+/** The explainer: the same quiet bed, a soft chime per step and small marks for each event. */
+export const howSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, HOW_DURATION, [1.2, HOW_CUES.end])
+  arrival(ctx, out, 1.2, 0.55)
+  const chime = [659.25, 739.99, 830.61, 987.77, 1108.73, 1318.51]
+  HOW_CUES.steps.forEach((at, i) => {
+    tick(ctx, out, at + 0.25, chime[i], 0.1, 0.5)
+    hit(ctx, out, at + 0.25, 0.22, 110, 50, 0.4)
+  })
+  sweep(ctx, out, 5.2, HOW_CUES.depositLand, 400, 2400, 0.08)
+  tick(ctx, out, HOW_CUES.leaf, 1567.98, 0.1)
+  sweep(ctx, out, HOW_CUES.blend - 0.4, HOW_CUES.blend + 1.2, 3000, 500, 0.06)
+  HOW_CUES.proofLines.forEach((at, i) => tick(ctx, out, at, 880 + i * 110, 0.08))
+  tick(ctx, out, HOW_CUES.nullifier, 1318.51, 0.09)
+  ;[0, 0.35, 0.7].forEach((d) => tick(ctx, out, HOW_CUES.verify + d, 1174.66, 0.08))
+  hit(ctx, out, HOW_CUES.key, 0.3, 140, 60, 0.4)
+  sweep(ctx, out, HOW_CUES.send, HOW_CUES.send + 1.6, 500, 3000, 0.06)
+  tick(ctx, out, HOW_CUES.receipt, 987.77, 0.1)
+  hit(ctx, out, HOW_CUES.honest, 0.25, 120, 50, 0.4)
+  arrival(ctx, out, HOW_CUES.end, 0.7)
 }
 
 /** Renders a soundtrack, levelled so its loudest moment sits just under full scale. */

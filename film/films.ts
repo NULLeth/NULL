@@ -1,4 +1,5 @@
-import { launchSound, type Soundtrack } from './audio'
+import { howSound, launchSound, type Soundtrack } from './audio'
+import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
 
 export interface Film {
@@ -10,4 +11,5 @@ export interface Film {
 
 export const FILMS: Record<string, Film> = {
   launch: { duration: DURATION, sound: launchSound, draw: drawLaunch },
+  how: { duration: HOW_DURATION, sound: howSound, draw: drawHow },
 }

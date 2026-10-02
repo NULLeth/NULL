@@ -9,7 +9,9 @@ import { renderFilm } from './export'
 import { FILMS } from './films'
 import { MONO, SANS } from './kit'
 
-const film = FILMS.launch
+const params = new URLSearchParams(location.search)
+const filmName = params.get('film') && FILMS[params.get('film')!] ? params.get('film')! : 'launch'
+const film = FILMS[filmName]
 const stage = document.getElementById('stage') as HTMLCanvasElement
 const status = document.getElementById('status') as HTMLDivElement
 const slider = document.getElementById('time') as HTMLInputElement
@@ -112,6 +114,7 @@ async function start() {
   say('loading fonts…')
   await fontsReady()
   slider.max = String(film.duration)
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('[data-film]')) a.classList.toggle('on', a.dataset.film === filmName)
   slider.oninput = () => {
     playing = false
     draw(Number(slider.value))
@@ -138,14 +141,14 @@ async function start() {
       bitrate: 16_000_000,
       onProgress: (done, total, stage) => say(stage === 'frames' ? `rendering frame ${done} of ${total}…` : `rendering ${stage}…`),
     })
-    download(blob, 'NULL-launch.mp4')
-    say(`done: ${(blob.size / 1e6).toFixed(1)} MB in ${((performance.now() - started) / 1000).toFixed(0)} s — saved as NULL-launch.mp4`)
+    download(blob, `NULL-${filmName}.mp4`)
+    say(`done: ${(blob.size / 1e6).toFixed(1)} MB in ${((performance.now() - started) / 1000).toFixed(0)} s — saved as NULL-${filmName}.mp4`)
   })
 
   bind('png', async () => {
     const t = Number(slider.value)
     draw(t)
-    download(await toBlob(), `NULL-launch-${t.toFixed(2)}s.png`)
+    download(await toBlob(), `NULL-${filmName}-${t.toFixed(2)}s.png`)
   })
 
   const q = new URLSearchParams(location.search)
