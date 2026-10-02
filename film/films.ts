@@ -1,7 +1,8 @@
-import { chatSound, howSound, launchSound, type Soundtrack } from './audio'
+import { chatSound, howSound, launchSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
+import { WEB_DURATION, drawWeb } from './web'
 
 export interface Film {
   duration: number
@@ -11,6 +12,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  web: { duration: WEB_DURATION, sound: webSound, draw: drawWeb },
   launch: { duration: DURATION, sound: launchSound, draw: drawLaunch },
   how: { duration: HOW_DURATION, sound: howSound, draw: drawHow },
   chat: { duration: CHAT_DURATION, sound: chatSound, draw: drawChat },

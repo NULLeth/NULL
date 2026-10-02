@@ -5,6 +5,7 @@
 import { CHAT_CUES, CHAT_DURATION } from './chat'
 import { HOW_CUES, HOW_DURATION } from './how'
 import { CUE, DURATION, typingTimes } from './launch'
+import { WEB_CUES, WEB_DURATION } from './web'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -208,6 +209,21 @@ export const chatSound: Soundtrack = (ctx, out) => {
   CHAT_CUES.steps.forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66, 1318.51][i], 0.1))
   CHAT_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, CHAT_CUES.end + 0.1, 0.7)
+}
+
+/** Web search promo: the switch, typing, the proof steps, a soft search sweep, one tick per source. */
+export const webSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, WEB_DURATION, [1.0, WEB_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, WEB_CUES.toggle, 1174.66, 0.13)
+  const n = 37
+  for (let i = 0; i < n; i++) click(ctx, out, WEB_CUES.typeStart + ((WEB_CUES.typeEnd - WEB_CUES.typeStart) * i) / n, 0.09, 6000 + i * 13)
+  tick(ctx, out, WEB_CUES.send, 1318.51, 0.12)
+  WEB_CUES.steps.forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66, 1318.51][i], 0.1))
+  sweep(ctx, out, WEB_CUES.steps[1], WEB_CUES.steps[2], 400, 2400, 0.045)
+  WEB_CUES.sources.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22, 1760][i], 0.08))
+  WEB_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, WEB_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */
