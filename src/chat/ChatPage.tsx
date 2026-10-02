@@ -158,6 +158,37 @@ function Sidebar({
   )
 }
 
+/** A deposit landed on-chain but this browser never finished confirming it. */
+function RecoverDeposit({ amountEth }: { amountEth: number }) {
+  const live = useLive()
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+  const run = async () => {
+    if (!live) return
+    setBusy(true)
+    setErr('')
+    try {
+      await live.recoverDeposit(setMsg)
+    } catch (e) {
+      setErr(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mb-3 rounded-lg border border-warn/30 bg-warn/[0.05] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13.5px] text-soft">A deposit of {fmtEth(amountEth, 4)} ETH from this browser isn&apos;t confirmed yet.</span>
+        <Button size="sm" variant="primary" onClick={() => void run()} loading={busy}>
+          Recover deposit
+        </Button>
+      </div>
+      {(msg || err) && <p className={`mt-2 font-mono text-[11px] leading-relaxed ${err ? 'text-bad/90' : 'text-muted'}`}>{err || msg}</p>}
+    </div>
+  )
+}
+
 // ─── messages ────────────────────────────────────────────────────────────────
 
 function EmptyState({ onPick, disabled, web }: { onPick: (s: string) => void; disabled: boolean; web: boolean }) {
@@ -551,12 +582,19 @@ export function ChatPage() {
                 zkAPI could not start: {account.error}
               </div>
             )}
-            {IS_LIVE && account.status === 'ready' && !account.hasNote && (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line-2 bg-panel/70 px-4 py-3">
-                <span className="text-[13.5px] text-muted">Fund a private balance on Ethereum mainnet to start chatting.</span>
-                <Button size="sm" variant="primary" onClick={fund}>
-                  Fund
-                </Button>
+            {IS_LIVE && account.status === 'ready' && !account.hasNote && live?.pendingDepositEth != null && <RecoverDeposit amountEth={live.pendingDepositEth} />}
+            {IS_LIVE && account.status === 'ready' && !account.hasNote && live?.pendingDepositEth == null && (
+              <div className="mb-3 rounded-lg border border-line-2 bg-panel/70 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-[13.5px] text-muted">Fund a private balance on Ethereum mainnet to start chatting.</span>
+                  <Button size="sm" variant="primary" onClick={fund}>
+                    Fund
+                  </Button>
+                </div>
+                <p className="mt-2 text-[12px] leading-relaxed text-dim">
+                  Funded before? A private balance lives in the browser and on the exact site address you funded it on ({window.location.host} here). Open that
+                  address in that browser to see it.
+                </p>
               </div>
             )}
             <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">

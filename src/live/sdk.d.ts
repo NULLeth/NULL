@@ -18,7 +18,14 @@ declare module '@openanonymity/zkapi-browser-sdk' {
     title?: string
     message?: string
   }
+  export interface ZkPendingDeposit {
+    phase: string
+    /** gwei */
+    amount: number
+    transaction_hash: string | null
+  }
   export interface ZkSnapshot {
+    config: { pending_deposit?: ZkPendingDeposit | null } | null
     wallet: ZkWalletStatus | null
     walletAddress: string | null
     withdrawal: { phase?: string; mode?: string; destination?: string; transactionHash?: string | null } | null
@@ -57,6 +64,8 @@ declare module '@openanonymity/zkapi-browser-sdk' {
     readonly nativePriceQuote: ZkPriceQuote | null
     refreshEthUsdPrice(opts?: { signal?: AbortSignal }): Promise<ZkPriceQuote>
     deposit(ethAmount: string, onStatus?: (message: string) => void): Promise<unknown>
+    /** Finishes a deposit whose transaction landed but was never confirmed in this browser. */
+    recoverBrowserDeposit(onStatus?: (message: string) => void): Promise<unknown>
     withdraw(mode: 'mutual' | 'escape', onStatus?: (message: string) => void, opts?: { destination?: string }): Promise<unknown>
     acquireInferenceAccess(sessionId: string, opts?: { signal?: AbortSignal; spendingLimitUsd?: number; onProgress?: (p: ZkProgress) => void }): Promise<ZkAccess>
     settleActiveLease(onStatus?: (message: string) => void, opts?: { sessionId?: string | null }): Promise<unknown>

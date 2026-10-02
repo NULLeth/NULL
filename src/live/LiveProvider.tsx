@@ -11,6 +11,8 @@ export interface LiveState {
   error: string | null
   hasNote: boolean
   balanceEth: number
+  /** a deposit this browser sent that isn't confirmed yet (ETH), or null */
+  pendingDepositEth: number | null
   depositEth: number
   expiryTs: number | null
   pendingRequest: boolean
@@ -27,6 +29,7 @@ interface LiveApi extends LiveState {
   client: () => Promise<ZkClient>
   addLog: (e: Omit<ActivityEvent, 'id' | 'ts'>) => void
   refresh: () => Promise<void>
+  recoverDeposit: (onStatus: (message: string) => void) => Promise<void>
 }
 
 const Ctx = createContext<LiveApi | null>(null)
@@ -46,6 +49,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     error: null,
     hasNote: false,
     balanceEth: 0,
+    pendingDepositEth: null,
     depositEth: 0,
     expiryTs: null,
     pendingRequest: false,
@@ -66,6 +70,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       error: null,
       hasNote: !!snap.wallet?.has_note,
       balanceEth: note ? gweiToEth(note.current_balance) : 0,
+      pendingDepositEth: snap.config?.pending_deposit ? gweiToEth(snap.config.pending_deposit.amount) : null,
       depositEth: note ? gweiToEth(note.deposit_amount) : 0,
       expiryTs: note?.expiry_ts ?? null,
       pendingRequest: !!snap.wallet?.pending_request,
@@ -124,7 +129,16 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       .catch(() => {})
   }, [apply])
 
-  const api = useMemo<LiveApi>(() => ({ ...state, client: loadZkapi, addLog, refresh }), [state, addLog, refresh])
+  const recoverDeposit = useCallback<LiveApi['recoverDeposit']>(
+    async (onStatus) => {
+      const c = await loadZkapi()
+      await c.recoverBrowserDeposit(onStatus)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  const api = useMemo<LiveApi>(() => ({ ...state, client: loadZkapi, addLog, refresh, recoverDeposit }), [state, addLog, refresh, recoverDeposit])
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }
 
