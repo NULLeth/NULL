@@ -2,6 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "rewrites": [
-    { "source": "/zkapi-deployment/:path*", "destination": "https://zkapi-mainnet.openanonymity.ai/:path*" }
+    { "source": "/zkapi-deployment/:path*", "destination": "https://zkapi-mainnet.openanonymity.ai/:path*" },
+    { "source": "/live", "destination": "/index.html" },
+    { "source": "/demo", "destination": "/index.html" }
   ]
 }

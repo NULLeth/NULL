@@ -190,13 +190,12 @@ export function Dashboard() {
                 <NetworkStatus />
                 <button
                   type="button"
-                  hidden={IS_LIVE}
                   onClick={() => {
                     reset()
                     setDashTab('overview')
                     toast('Demo state reset', 'info')
                   }}
-                  className="mt-4 inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.12em] text-faint transition-colors hover:text-muted"
+                  className={`mt-4 items-center gap-1.5 ${IS_LIVE ? 'hidden' : 'inline-flex'} font-mono text-[10px] tracking-[0.12em] text-faint transition-colors hover:text-muted`}
                 >
                   <RotateCcw className="size-3" />
                   RESET DEMO
@@ -224,13 +223,12 @@ export function Dashboard() {
                 <NetworkStatus />
                 <button
                   type="button"
-                  hidden={IS_LIVE}
                   onClick={() => {
                     reset()
                     setDashTab('overview')
                     toast('Demo state reset', 'info')
                   }}
-                  className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[0.12em] text-faint"
+                  className={`items-center gap-1.5 font-mono text-[10px] tracking-[0.12em] text-faint ${IS_LIVE ? 'hidden' : 'inline-flex'}`}
                 >
                   <RotateCcw className="size-3" />
                   RESET

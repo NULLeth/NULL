@@ -3,12 +3,15 @@
  *  - 'demo': everything simulated in the browser (screenshots, explaining the product).
  *  - 'live': real zkAPI on Ethereum mainnet via the Open Anonymity deployment.
  *
- * Default comes from VITE_NULL_MODE at build time; `?live` / `?demo` override it
- * so both can be opened from the same deployment.
+ * Default comes from VITE_NULL_MODE at build time; the paths /live and /demo
+ * (or ?live / ?demo) override it so both can be opened from the same deployment.
  */
 export type AppMode = 'live' | 'demo'
 
 function resolveMode(): AppMode {
+  const path = (globalThis.location?.pathname ?? '/').replace(/\/+$/, '').toLowerCase()
+  if (path === '/demo') return 'demo'
+  if (path === '/live') return 'live'
   const params = new URLSearchParams(globalThis.location?.search ?? '')
   if (params.has('demo')) return 'demo'
   if (params.has('live')) return 'live'
@@ -18,13 +21,9 @@ function resolveMode(): AppMode {
 export const MODE: AppMode = resolveMode()
 export const IS_LIVE = MODE === 'live'
 
-/** Link that opens the other mode on the same page. */
+/** Link that opens the other mode. */
 export function otherModeHref(): string {
-  const url = new URL(globalThis.location.href)
-  url.searchParams.delete('live')
-  url.searchParams.delete('demo')
-  url.searchParams.set(IS_LIVE ? 'demo' : 'live', '')
-  return url.pathname + url.search.replace(/=(&|$)/g, '$1')
+  return IS_LIVE ? '/demo' : '/live'
 }
 
 export const LIVE = {

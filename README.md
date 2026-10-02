@@ -33,7 +33,7 @@ The site runs in two modes:
   [`0x4386…81fe`](https://etherscan.io/address/0x4386FDbdA35D995beB3BF8625118Ec5982ec81fe),
   real proofs, real AI requests through OpenRouter, real withdrawals.
 
-Open live mode with `?live` (and demo with `?demo`), or make it the default by
+Open live mode at `/live` (demo at `/demo`; `?live` / `?demo` work too), or make it the default by
 setting `VITE_NULL_MODE=live` at build time (Vercel → Settings → Environment Variables).
 
 What is live today: fund (one private balance per browser, no top-ups), Claude / GPT /
