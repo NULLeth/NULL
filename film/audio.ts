@@ -7,6 +7,7 @@ import { HOW_CUES, HOW_DURATION } from './how'
 import { CUE, DURATION, typingTimes } from './launch'
 import { WEB_CUES, WEB_DURATION } from './web'
 import { MODELS_CUES, MODELS_DURATION } from './models'
+import { IMAGE_CUES, IMAGE_DURATION } from './image'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -243,6 +244,27 @@ export const modelsSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, MODELS_CUES.send, 1318.51, 0.12)
   MODELS_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, MODELS_CUES.end + 0.1, 0.7)
+}
+
+/** Image promo: the switch, typing, proof steps, a rising sweep as each picture develops. */
+export const imageSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, IMAGE_DURATION, [1.0, IMAGE_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, IMAGE_CUES.toggle, 1174.66, 0.13)
+  tick(ctx, out, IMAGE_CUES.aspect, 1318.51, 0.08)
+  const n = 40
+  for (let i = 0; i < n; i++) click(ctx, out, IMAGE_CUES.typeStart + ((IMAGE_CUES.typeEnd - IMAGE_CUES.typeStart) * i) / n, 0.09, 8000 + i * 19)
+  tick(ctx, out, IMAGE_CUES.send, 1318.51, 0.12)
+  IMAGE_CUES.steps.slice(0, 2).forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66][i], 0.1))
+  sweep(ctx, out, IMAGE_CUES.steps[1], IMAGE_CUES.reveal[1], 250, 2600, 0.05)
+  arrival(ctx, out, IMAGE_CUES.reveal[0] + 0.1, 0.45)
+  const m = 15
+  for (let i = 0; i < m; i++) click(ctx, out, IMAGE_CUES.editTypeStart + ((IMAGE_CUES.editTypeEnd - IMAGE_CUES.editTypeStart) * i) / m, 0.09, 9000 + i * 23)
+  tick(ctx, out, IMAGE_CUES.editSend, 1318.51, 0.12)
+  sweep(ctx, out, IMAGE_CUES.editSend + 0.2, IMAGE_CUES.reveal2[1], 300, 3000, 0.05)
+  arrival(ctx, out, IMAGE_CUES.reveal2[0] + 0.1, 0.45)
+  IMAGE_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, IMAGE_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */
