@@ -37,7 +37,7 @@ const CATALOG: ServiceInfo[] = [
     category: 'AI ROUTER',
     group: 'ai',
     kind: 'chat',
-    description: 'Hundreds of open and frontier models behind one private route.',
+    description: 'Gemini, Grok, DeepSeek, Kimi, Llama and more behind one private route.',
     priceUsd: 0.008,
     unit: 'REQUEST',
     route: 'openrouter/auto',

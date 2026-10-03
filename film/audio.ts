@@ -6,6 +6,7 @@ import { CHAT_CUES, CHAT_DURATION } from './chat'
 import { HOW_CUES, HOW_DURATION } from './how'
 import { CUE, DURATION, typingTimes } from './launch'
 import { WEB_CUES, WEB_DURATION } from './web'
+import { MODELS_CUES, MODELS_DURATION } from './models'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -224,6 +225,24 @@ export const webSound: Soundtrack = (ctx, out) => {
   WEB_CUES.sources.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22, 1760][i], 0.08))
   WEB_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, WEB_CUES.end + 0.1, 0.7)
+}
+
+/** Models promo: a soft tick per model card, a hit as they wire into one balance, the picker, typing. */
+export const modelsSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, MODELS_DURATION, [1.0, MODELS_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  const scale = [880, 987.77, 1108.73, 1174.66, 1318.51, 1479.98]
+  MODELS_CUES.cards.forEach((at, i) => tick(ctx, out, at, scale[i % scale.length], 0.06))
+  hit(ctx, out, MODELS_CUES.pill, 0.45, 120, 46, 0.45)
+  sweep(ctx, out, MODELS_CUES.pill, MODELS_CUES.pill + 0.9, 300, 2200, 0.04)
+  tick(ctx, out, MODELS_CUES.open, 987.77, 0.1)
+  for (let i = 0; i < 6; i++) tick(ctx, out, MODELS_CUES.moveStart + ((MODELS_CUES.moveEnd - MODELS_CUES.moveStart) * i) / 6, 1760, 0.035, 0.08)
+  tick(ctx, out, MODELS_CUES.select, 1318.51, 0.12)
+  const n = 30
+  for (let i = 0; i < n; i++) click(ctx, out, MODELS_CUES.typeStart + ((MODELS_CUES.typeEnd - MODELS_CUES.typeStart) * i) / n, 0.09, 7000 + i * 17)
+  tick(ctx, out, MODELS_CUES.send, 1318.51, 0.12)
+  MODELS_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, MODELS_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */

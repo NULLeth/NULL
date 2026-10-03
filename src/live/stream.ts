@@ -64,7 +64,11 @@ export async function readStream(res: Response, onDelta: (t: string) => void, si
 export async function providerError(res: Response): Promise<string> {
   try {
     const j = (await res.json()) as { error?: { message?: string } }
-    if (j.error?.message) return `${res.status}: ${j.error.message}`
+    const msg = j.error?.message
+    if (msg && /no endpoints|data policy|not a valid model|model.*(not found|does not exist|unavailable)/i.test(msg)) {
+      return `This model isn't available through zkAPI right now. Pick another model. (${res.status}: ${msg})`
+    }
+    if (msg) return `${res.status}: ${msg}`
   } catch {
     /* not JSON */
   }

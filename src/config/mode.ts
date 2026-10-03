@@ -48,11 +48,24 @@ export const LIVE = {
   feeWarnShare: 0.2,
   operator: 'Open Anonymity',
   /** Models offered in NULL Chat (OpenRouter ids). */
+  /**
+   * Models offered in NULL Chat, grouped by vendor in the picker. Each has
+   * zero-data-retention endpoints on OpenRouter, so a ZDR-only key can reach it.
+   */
   chatModels: [
-    { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5' },
-    { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5' },
-    { id: 'openai/gpt-6.1-sol', label: 'GPT-6.1' },
-    { id: 'openrouter/auto', label: 'Auto · OpenRouter' },
+    { id: 'anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5', vendor: 'Anthropic' },
+    { id: 'anthropic/claude-opus-5.5', label: 'Claude Opus 5.5', vendor: 'Anthropic' },
+    { id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5', vendor: 'Anthropic' },
+    { id: 'openai/gpt-6.1-sol', label: 'GPT-6.1', vendor: 'OpenAI' },
+    { id: 'openai/gpt-6-luna', label: 'GPT-6 Luna', vendor: 'OpenAI' },
+    { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', vendor: 'Google' },
+    { id: 'x-ai/grok-4.7', label: 'Grok 4.7', vendor: 'xAI' },
+    { id: 'deepseek/deepseek-v4-pro-0813', label: 'DeepSeek V4 Pro', vendor: 'DeepSeek' },
+    { id: 'moonshotai/kimi-k3', label: 'Kimi K3', vendor: 'Moonshot AI' },
+    { id: 'z-ai/glm-5.3', label: 'GLM 5.3', vendor: 'Z.ai' },
+    { id: 'mistralai/mistral-medium-3-5', label: 'Mistral Medium 3.5', vendor: 'Mistral' },
+    { id: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick', vendor: 'Meta' },
+    { id: 'openrouter/auto', label: 'Auto · OpenRouter', vendor: 'Auto' },
   ],
   models: {
     claude: 'anthropic/claude-sonnet-5.5',

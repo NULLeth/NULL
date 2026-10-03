@@ -25,6 +25,8 @@ import { newConversation, newMessage, titleFrom, useConversations, type ChatMess
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
 const modelLabel = (id: string) => MODELS.find((m) => m.id === id)?.label ?? id
+/** vendors in list order, for the grouped model picker */
+const VENDORS = [...new Set(MODELS.map((m) => m.vendor))]
 const SUGGESTIONS = [
   'Explain Ethereum blobs in simple terms.',
   'What does a nullifier do?',
@@ -214,6 +216,9 @@ function EmptyState({ onPick, disabled, web }: { onPick: (s: string) => void; di
           </button>
         ))}
       </div>
+      <p className="mt-6 font-mono text-[10.5px] tracking-[0.06em] text-dim">
+        {MODELS.length - 1} models · Claude, GPT, Gemini, Grok, DeepSeek, Kimi, Llama and more · switch any time at the top
+      </p>
     </div>
   )
 }
@@ -531,10 +536,14 @@ export function ChatPage() {
               disabled={sending}
               className="h-9 appearance-none rounded-md border border-line-2 bg-panel pl-3 pr-8 font-mono text-[11.5px] tracking-[0.04em] text-fg outline-none transition-colors hover:border-line-3 focus:border-line-3 disabled:opacity-50"
             >
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
+              {VENDORS.map((v) => (
+                <optgroup key={v} label={v}>
+                  {MODELS.filter((m) => m.vendor === v).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-dim" />
