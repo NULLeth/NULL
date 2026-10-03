@@ -7,6 +7,7 @@ import { ConnectModal } from './ConnectModal'
 import { DocsModal } from './DocsModal'
 import { FundModal } from './FundModal'
 import { PlaygroundModal } from './PlaygroundModal'
+import { TorModal } from './TorModal'
 import { WithdrawModal } from './WithdrawModal'
 import { IS_LIVE } from '../config/mode'
 import { LiveFundModal } from './live/LiveFundModal'
@@ -23,6 +24,7 @@ export function ModalRoot() {
       <AgentModal open={name === 'agent'} />
       <PlaygroundModal open={name === 'playground'} initial={modal?.name === 'playground' ? modal.serviceId : 'claude'} />
       <DocsModal open={name === 'docs'} />
+      <TorModal open={name === 'tor'} />
       <Toaster />
     </>
   )

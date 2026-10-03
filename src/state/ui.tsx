@@ -8,6 +8,7 @@ export type ModalState =
   | { name: 'agent' }
   | { name: 'playground'; serviceId: ServiceId }
   | { name: 'docs' }
+  | { name: 'tor' }
   | null
 
 export type DashTab = 'overview' | 'services' | 'agents' | 'activity'

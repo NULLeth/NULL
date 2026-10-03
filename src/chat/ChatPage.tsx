@@ -14,10 +14,12 @@ import { useNow } from '../lib/hooks'
 import { randHex, randId } from '../lib/random'
 import { errorMessage } from '../live/client'
 import type { Source } from '../live/stream'
+import { useConnection } from '../live/connection'
 import { useLive } from '../live/LiveProvider'
 import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
+import { useUi } from '../state/ui'
 import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type WireMessage } from './engine'
 import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
 import { Markdown } from './Markdown'
@@ -79,6 +81,9 @@ const mergeSources = (have: Source[], add: Source[]) => {
   return [...have, ...add.filter((s) => !seen.has(s.url) && seen.add(s.url))]
 }
 
+const daysLeft = (expiryTs: number | null) => (expiryTs ? Math.max(0, Math.ceil((expiryTs * 1000 - Date.now()) / 86_400_000)) : null)
+const expiryDate = (expiryTs: number) => new Date(expiryTs * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
 // ─── sidebar ─────────────────────────────────────────────────────────────────
 
 function BalanceMini() {
@@ -106,6 +111,13 @@ function BalanceMini() {
         )}
       </div>
       <div className="mt-0.5 font-mono text-[11px] text-dim">{account.balanceUsd != null ? `≈ ${fmtUsd(account.balanceUsd, { cents: true })}` : '—'}</div>
+      {IS_LIVE && account.hasNote && account.expiryTs != null && (
+        <Tooltip content="Private balances expire 30 days after funding. Withdraw before then: after that the operator can claim what's left.">
+          <div className={`mt-1 font-mono text-[10.5px] ${(daysLeft(account.expiryTs) ?? 99) <= 7 ? 'text-warn' : 'text-dim'}`}>
+            expires {expiryDate(account.expiryTs)} · {daysLeft(account.expiryTs)} days left
+          </div>
+        </Tooltip>
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button size="sm" variant="secondary" onClick={fund} disabled={account.status !== 'ready'}>
           Fund
@@ -209,6 +221,49 @@ function RecoverDeposit({ amountEth }: { amountEth: number }) {
         </Button>
       </div>
       {(msg || err) && <p className={`mt-2 font-mono text-[11px] leading-relaxed ${err ? 'text-bad/90' : 'text-muted'}`}>{err || msg}</p>}
+    </div>
+  )
+}
+
+/** The line under the composer: what stays hidden, what doesn't, and the Tor status. */
+function PrivacyLine({ web, image }: { web: boolean; image: boolean }) {
+  const c = useConnection()
+  const { open } = useUi()
+  const tor = c.status === 'done' && c.tor
+  return (
+    <p className="mt-2 text-center font-mono text-[10px] leading-relaxed tracking-[0.04em] text-dim">
+      <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt
+      {web ? ' · search queries go to the search provider via OpenRouter' : ''}
+      {image ? ' · images are saved only in this browser' : ''} ·{' '}
+      {tor ? (
+        <button type="button" onClick={() => open({ name: 'tor' })} className="text-ok/90 underline-offset-2 hover:underline">
+          Tor ✓ your IP is hidden too
+        </button>
+      ) : (
+        <>
+          your IP is visible to OpenRouter ·{' '}
+          <button type="button" onClick={() => open({ name: 'tor' })} className="text-soft underline decoration-line-3 underline-offset-2 hover:text-fg">
+            hide it with Tor
+          </button>
+        </>
+      )}
+    </p>
+  )
+}
+
+/** Shown when the private balance is close to expiring. */
+function ExpiryWarning({ expiryTs }: { expiryTs: number }) {
+  const { withdraw } = useActions()
+  const left = daysLeft(expiryTs) ?? 0
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/[0.05] px-4 py-3">
+      <span className="text-[13px] leading-relaxed text-soft">
+        Your private balance expires on <span className="text-fg">{expiryDate(expiryTs)}</span> ({left === 0 ? 'today' : `${left} day${left === 1 ? '' : 's'}`}).
+        Withdraw before then: after that the operator can claim what&apos;s left.
+      </span>
+      <Button size="sm" variant="secondary" onClick={withdraw}>
+        Withdraw
+      </Button>
     </div>
   )
 }
@@ -401,6 +456,8 @@ export function ChatPage() {
   const account = useAccount()
   const { spend } = useNull()
   const { fund } = useActions()
+  const ui = useUi()
+  const conn = useConnection()
   const [activeId, setActiveId] = useState<string>(() => (WEB_FROM_URL || IMAGE_FROM_URL ? '' : (list[0]?.id ?? '')))
   const [draft, setDraft] = useState<Conversation>(() => ({
     ...newConversation(DEFAULT_MODEL),
@@ -707,6 +764,18 @@ export function ChatPage() {
               </span>
             </Tooltip>
           )}
+          {conn.status === 'done' && conn.tor && (
+            <Tooltip content="You're connected through Tor: OpenRouter and NULL see a Tor exit, not your IP.">
+              <button
+                type="button"
+                onClick={() => ui.open({ name: 'tor' })}
+                className="hidden items-center gap-1.5 rounded-full border border-ok/30 px-2.5 py-1 font-mono text-[10px] tracking-[0.12em] text-ok/90 sm:inline-flex"
+              >
+                <StatusDot tone="ok" live />
+                TOR
+              </button>
+            </Tooltip>
+          )}
           {IS_LIVE && keyOpen && !sending && (
             <Button size="sm" variant="ghost" onClick={() => void endSession()} loading={settling} className="hidden sm:inline-flex">
               End & settle
@@ -738,6 +807,7 @@ export function ChatPage() {
                 zkAPI could not start: {account.error}
               </div>
             )}
+            {IS_LIVE && account.hasNote && account.expiryTs != null && (daysLeft(account.expiryTs) ?? 99) <= 7 && <ExpiryWarning expiryTs={account.expiryTs} />}
             {IS_LIVE && account.status === 'ready' && !account.hasNote && live?.pendingDepositEth != null && <RecoverDeposit amountEth={live.pendingDepositEth} />}
             {IS_LIVE && account.status === 'ready' && !account.hasNote && live?.pendingDepositEth == null && (
               <div className="mb-3 rounded-lg border border-line-2 bg-panel/70 px-4 py-3">
@@ -851,11 +921,7 @@ export function ChatPage() {
                 </button>
               )}
             </div>
-            <p className="mt-2 text-center font-mono text-[10px] leading-relaxed tracking-[0.04em] text-dim">
-              <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt
-              {conv.web ? ' · search queries go to the search provider via OpenRouter' : ''}
-              {conv.image ? ' · images are saved only in this browser' : ''} · your IP is visible to OpenRouter (use Tor or a VPN)
-            </p>
+            <PrivacyLine web={!!conv.web} image={!!conv.image} />
           </div>
         </div>
       </main>

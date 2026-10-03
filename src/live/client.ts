@@ -23,7 +23,8 @@ export function loadZkapi(): Promise<ZkClient> {
     sdk.configureBrowserSdk({ configUrl: '/zkapi/browser-config.json', workerUrl: '/zkapi/assets/zkapiWasmWorker.js' })
     await Promise.race([
       sdk.zkapiClient.init(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('zkAPI did not start within 45 s. Check your connection and reload.')), 45_000)),
+      // generous for Tor, where the first load of the prover files is slow
+      new Promise((_, reject) => setTimeout(() => reject(new Error('zkAPI did not start within 90 s. Check your connection and reload.')), 90_000)),
     ])
     return sdk.zkapiClient
   })().catch((err) => {
