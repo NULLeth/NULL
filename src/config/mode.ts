@@ -67,6 +67,15 @@ export const LIVE = {
     { id: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick', vendor: 'Meta' },
     { id: 'openrouter/auto', label: 'Auto · OpenRouter', vendor: 'Auto' },
   ],
+  /**
+   * Image models (OpenRouter image API), each with zero-data-retention endpoints.
+   * `approxUsd` is a typical 1K image; the exact charge comes back with each image.
+   */
+  imageModels: [
+    { id: 'google/gemini-3.1-flash-image', label: 'Nano Banana 2', vendor: 'Google', approxUsd: 0.07 },
+    { id: 'google/gemini-3-pro-image', label: 'Nano Banana Pro', vendor: 'Google', approxUsd: 0.14 },
+    { id: 'google/gemini-3.1-flash-lite-image', label: 'Nano Banana 2 Lite', vendor: 'Google', approxUsd: 0.04 },
+  ],
   models: {
     claude: 'anthropic/claude-sonnet-5.5',
     gpt: 'openai/gpt-6.1-sol',

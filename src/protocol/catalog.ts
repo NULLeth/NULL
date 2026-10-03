@@ -90,12 +90,14 @@ const CATALOG: ServiceInfo[] = [
 
 /**
  * In live mode the zkAPI mainnet deployment routes AI models via OpenRouter, and
- * web search rides on the same key (OpenRouter's web plugin, used in NULL Chat).
- * RPC and media routes are shown as coming soon.
+ * web search and image generation ride on the same key (used in NULL Chat).
+ * The RPC route is shown as coming soon.
  */
 export const SERVICES: ServiceInfo[] = CATALOG.map((s) => {
   if (!IS_LIVE || s.kind === 'chat') return s
   if (s.kind === 'search') return { ...s, vendor: 'OpenRouter web', latencyMs: 3500, description: 'Live web answers with sources, inside NULL Chat. No account attached.' }
+  if (s.kind === 'image')
+    return { ...s, vendor: 'Nano Banana via OpenRouter', latencyMs: 12000, description: 'Create and edit images inside NULL Chat. Saved only in your browser.' }
   return { ...s, status: 'soon' }
 })
 

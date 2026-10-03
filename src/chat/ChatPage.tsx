@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, ChevronDown, Globe, Menu, Plus, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -11,20 +11,25 @@ import { WalletButton } from '../components/WalletButton'
 import { IS_LIVE, LIVE } from '../config/mode'
 import { ago, fmtEth, fmtUsd } from '../lib/format'
 import { useNow } from '../lib/hooks'
-import { randHex } from '../lib/random'
+import { randHex, randId } from '../lib/random'
 import { errorMessage } from '../live/client'
 import type { Source } from '../live/stream'
 import { useLive } from '../live/LiveProvider'
 import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
-import { sendDemo, sendLive, type WireMessage } from './engine'
+import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type WireMessage } from './engine'
+import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { newConversation, newMessage, titleFrom, useConversations, type ChatMessage, type Conversation } from './store'
 
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
-const modelLabel = (id: string) => MODELS.find((m) => m.id === id)?.label ?? id
+const IMAGE_MODELS = LIVE.imageModels
+const DEFAULT_IMAGE_MODEL = IMAGE_MODELS[0].id
+const imageModelOf = (c: Conversation) => IMAGE_MODELS.find((m) => m.id === c.imageModel) ?? IMAGE_MODELS[0]
+const modelLabel = (id: string) => MODELS.find((m) => m.id === id)?.label ?? IMAGE_MODELS.find((m) => m.id === id)?.label ?? id
+const ASPECTS = ['1:1', '16:9', '9:16'] as const
 /** vendors in list order, for the grouped model picker */
 const VENDORS = [...new Set(MODELS.map((m) => m.vendor))]
 const SUGGESTIONS = [
@@ -40,8 +45,25 @@ const WEB_SUGGESTIONS = [
   'Top AI headlines today, with sources.',
 ]
 
-/** `/chat?web=1` opens a new chat with web search already on. */
+const IMAGE_SUGGESTIONS = [
+  'A glass lighthouse on a cliff at night, cinematic',
+  'A tiny robot reading a book under a tree, watercolor',
+  'Retro 1970s poster that says "Privacy is normal"',
+  'The Ethereum logo carved from ice, studio lighting',
+]
+
+/** `/chat?web=1` / `/chat?image=1` open a new chat with web search or image mode already on. */
 const WEB_FROM_URL = new URLSearchParams(window.location.search).get('web') === '1'
+const IMAGE_FROM_URL = new URLSearchParams(window.location.search).get('image') === '1'
+
+const mimeOf = (dataUrl: string) => dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png'
+const extOf = (mime: string) => (mime.includes('jpeg') ? 'jpg' : mime.split('/')[1] || 'png')
+const imageIds = (c: Conversation) => c.messages.flatMap((m) => m.images?.map((i) => i.id) ?? [])
+/** the image a new prompt in this chat would edit: the answer right before it */
+const editTarget = (messages: ChatMessage[]) => {
+  const prev = messages[messages.length - 1]
+  return prev?.role === 'assistant' && !prev.error ? prev.images?.[0] : undefined
+}
 
 const host = (url: string) => {
   try {
@@ -136,7 +158,7 @@ function Sidebar({
             <button type="button" onClick={() => onSelect(c.id)} className="min-w-0 flex-1 px-3 py-2 text-left">
               <div className={`truncate text-[13px] ${c.id === activeId ? 'text-fg' : 'text-soft'}`}>{c.title}</div>
               <div className="mt-0.5 truncate font-mono text-[10.5px] text-dim">
-                {modelLabel(c.model)} · {ago(c.updatedAt, now)}
+                {modelLabel(c.image ? (c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.model)} · {ago(c.updatedAt, now)}
               </div>
             </button>
             <button
@@ -193,18 +215,20 @@ function RecoverDeposit({ amountEth }: { amountEth: number }) {
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
-function EmptyState({ onPick, disabled, web }: { onPick: (s: string) => void; disabled: boolean; web: boolean }) {
+function EmptyState({ onPick, disabled, web, image }: { onPick: (s: string) => void; disabled: boolean; web: boolean; image: boolean }) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
       <LogoMark className="size-11 text-fg" />
-      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">{web ? 'Search privately.' : 'Ask privately.'}</h1>
+      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">{image ? 'Imagine privately.' : web ? 'Search privately.' : 'Ask privately.'}</h1>
       <p className="mt-3 max-w-[480px] text-[14.5px] leading-relaxed text-muted">
-        {web
-          ? 'Web search is on: answers use live results and list their sources. Paid from your private balance like every request.'
-          : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
+        {image
+          ? 'Image mode is on: describe a picture and it appears here. Reply to edit it. Images are saved only in this browser.'
+          : web
+            ? 'Web search is on: answers use live results and list their sources. Paid from your private balance like every request.'
+            : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
       </p>
       <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
-        {(web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
+        {(image ? IMAGE_SUGGESTIONS : web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
           <button
             key={s}
             type="button"
@@ -217,7 +241,9 @@ function EmptyState({ onPick, disabled, web }: { onPick: (s: string) => void; di
         ))}
       </div>
       <p className="mt-6 font-mono text-[10.5px] tracking-[0.06em] text-dim">
-        {MODELS.length - 1} models · Claude, GPT, Gemini, Grok, DeepSeek, Kimi, Llama and more · switch any time at the top
+        {image
+          ? `${IMAGE_MODELS.length} image models · Nano Banana 2 by default · about ${Math.round(IMAGE_MODELS[0].approxUsd * 100)}¢ per image`
+          : `${MODELS.length - 1} models · Claude, GPT, Gemini, Grok, DeepSeek, Kimi, Llama and more · switch any time at the top`}
       </p>
     </div>
   )
@@ -249,6 +275,58 @@ function Sources({ list }: { list: Source[] }) {
   )
 }
 
+const ASPECT_WIDTH: Record<string, string> = { '1:1': 'max-w-[420px]', '16:9': 'max-w-[560px]', '9:16': 'max-w-[300px]' }
+
+function ChatImage({ id, aspect, mime }: { id: string; aspect: string; mime: string }) {
+  const url = useImageUrl(id)
+  return (
+    <div className={`w-full ${ASPECT_WIDTH[aspect] ?? ASPECT_WIDTH['1:1']}`}>
+      <div className="overflow-hidden rounded-xl border border-line-2 bg-panel" style={{ aspectRatio: aspect.replace(':', ' / ') }}>
+        {url ? (
+          <img src={url} alt="Generated image" className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center font-mono text-[11px] text-dim">{url === null ? 'image not found in this browser' : 'loading…'}</div>
+        )}
+      </div>
+      {url && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            href={url}
+            download={`NULL-image-${id}.${extOf(mime)}`}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-2 px-2.5 font-mono text-[10.5px] tracking-[0.1em] text-soft transition-colors hover:border-line-3 hover:text-fg"
+          >
+            <Download className="size-3" />
+            DOWNLOAD
+          </a>
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line-2 px-2.5 font-mono text-[10.5px] tracking-[0.1em] text-soft transition-colors hover:border-line-3 hover:text-fg"
+          >
+            <ExternalLink className="size-3" />
+            OPEN
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ImagePending({ aspect, phase }: { aspect: string; phase: string }) {
+  return (
+    <div className={`w-full ${ASPECT_WIDTH[aspect] ?? ASPECT_WIDTH['1:1']}`}>
+      <div className="relative overflow-hidden rounded-xl border border-line-2 bg-panel" style={{ aspectRatio: aspect.replace(':', ' / ') }}>
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-eth/[0.07] via-transparent to-white/[0.03]" />
+        <div className="absolute inset-0 flex items-center justify-center gap-2.5 px-4 text-center font-mono text-[12px] text-muted">
+          <Spinner className="size-3.5" />
+          {phase || 'Painting…'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; phase: string; streamingId: string | null; onRetry: () => void }) {
   return (
     <div className="mx-auto w-full max-w-[780px] space-y-7 px-4 py-8 sm:px-6">
@@ -264,7 +342,9 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
             </span>
             <div className="min-w-0 flex-1">
               {m.content ? <Markdown text={m.content} /> : null}
-              {streamingId === m.id && !m.content && (
+              {m.image && streamingId === m.id && <ImagePending aspect={conv.aspect ?? '1:1'} phase={phase} />}
+              {m.images?.map((img) => <ChatImage key={img.id} id={img.id} aspect={img.aspect} mime={img.mime} />)}
+              {!m.image && streamingId === m.id && !m.content && (
                 <div className="flex items-center gap-2.5 py-1 font-mono text-[12px] text-muted">
                   <Spinner className="size-3.5" />
                   {phase || 'Thinking…'}
@@ -291,10 +371,18 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                       web
                     </span>
                   )}
+                  {m.image && (
+                    <span className="inline-flex items-center gap-1">
+                      <ImageIcon className="size-3" />
+                      image
+                    </span>
+                  )}
                   {m.ms != null && <span>{(m.ms / 1000).toFixed(1)}s</span>}
+                  {m.costUsd != null && <span>{fmtUsd(m.costUsd, { cents: true })}</span>}
                   <Tooltip content="Paid from your private balance with a zero-knowledge proof. The provider never saw your wallet.">
                     <span className="text-ok/80">paid by proof ✓</span>
                   </Tooltip>
+                  {!!m.images?.length && i === conv.messages.length - 1 && <span className="text-faint">reply to edit this image</span>}
                 </div>
               )}
             </div>
@@ -313,8 +401,12 @@ export function ChatPage() {
   const account = useAccount()
   const { spend } = useNull()
   const { fund } = useActions()
-  const [activeId, setActiveId] = useState<string>(() => (WEB_FROM_URL ? '' : (list[0]?.id ?? '')))
-  const [draft, setDraft] = useState<Conversation>(() => ({ ...newConversation(DEFAULT_MODEL), web: WEB_FROM_URL }))
+  const [activeId, setActiveId] = useState<string>(() => (WEB_FROM_URL || IMAGE_FROM_URL ? '' : (list[0]?.id ?? '')))
+  const [draft, setDraft] = useState<Conversation>(() => ({
+    ...newConversation(DEFAULT_MODEL),
+    web: WEB_FROM_URL && !IMAGE_FROM_URL,
+    image: IMAGE_FROM_URL,
+  }))
   const [input, setInput] = useState('')
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -341,12 +433,23 @@ export function ChatPage() {
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 260) el.scrollTop = el.scrollHeight
   }, [conv.messages])
 
-  // textarea grows with its content
+  // textarea grows with its content (and refits when its width changes, e.g. first layout)
   useEffect(() => {
     const el = textarea.current
     if (!el) return
-    el.style.height = '0px'
-    el.style.height = `${Math.min(220, el.scrollHeight)}px`
+    const fit = () => {
+      el.style.height = '0px'
+      el.style.height = `${Math.min(220, el.scrollHeight)}px`
+    }
+    fit()
+    let width = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      fit()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [input])
 
   /** Settles the open key and books what it cost to the chat that used it. */
@@ -378,7 +481,11 @@ export function ChatPage() {
 
   const run = useCallback(
     async (target: Conversation, history: WireMessage[]) => {
-      const reply = newMessage('assistant', '', { model: target.model, ...(target.web ? { web: true } : {}) })
+      const imageModel = target.imageModel ?? DEFAULT_IMAGE_MODEL
+      const reply = newMessage('assistant', '', {
+        model: target.image ? imageModel : target.model,
+        ...(target.image ? { image: true } : target.web ? { web: true } : {}),
+      })
       const withReply = { ...target, messages: [...target.messages, reply], updatedAt: Date.now() }
       upsert(withReply)
       setActiveId(withReply.id)
@@ -407,6 +514,25 @@ export function ChatPage() {
         },
       }
       try {
+        if (target.image) {
+          const prompt = [...target.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
+          const prior = editTarget(target.messages.slice(0, -1))
+          const req = { prompt, aspect: target.aspect ?? '1:1', reference: prior ? await getImageDataUrl(prior.id) : null }
+          let img: GeneratedImage
+          if (IS_LIVE && live) {
+            if (keyOwner.current && keyOwner.current.id !== withReply.id) await endSession()
+            const client = await live.client()
+            if (!keyOwner.current) keyOwner.current = { id: withReply.id, startEth: live.balanceEth }
+            img = await sendImageLive(client, withReply.id, imageModel, req, hooks)
+          } else {
+            img = await sendImageDemo(req, hooks)
+            spend('image-gen', img.costUsd ?? 0.04, randHex(32), `image · ${modelLabel(imageModel)}`)
+          }
+          const id = randId('img', 12)
+          await putImage(id, img.dataUrl)
+          patch({ images: [{ id, aspect: req.aspect, mime: mimeOf(img.dataUrl) }], costUsd: img.costUsd, ms: performance.now() - t0 })
+          return
+        }
         if (IS_LIVE && live) {
           // a different chat still holds the key: settle it first so chats never share one
           if (keyOwner.current && keyOwner.current.id !== withReply.id) await endSession()
@@ -421,7 +547,7 @@ export function ChatPage() {
         }
         patch({ ms: performance.now() - t0 })
       } catch (err) {
-        if (ctrl.signal.aborted) patch({ ms: performance.now() - t0 })
+        if (ctrl.signal.aborted) patch(target.image ? { error: 'Stopped before the image was ready.' } : { ms: performance.now() - t0 })
         else patch({ error: errorMessage(err) })
       } finally {
         setStreamingId(null)
@@ -454,7 +580,7 @@ export function ChatPage() {
 
   const startNew = () => {
     if (sending) return
-    setDraft({ ...newConversation(conv.model), web: !!conv.web })
+    setDraft({ ...newConversation(conv.model), web: !!conv.web, image: !!conv.image, imageModel: conv.imageModel, aspect: conv.aspect })
     setActiveId('')
     setDrawer(false)
     setTimeout(() => textarea.current?.focus(), 50)
@@ -466,17 +592,25 @@ export function ChatPage() {
     setDrawer(false)
   }
 
-  const setModel = (model: string) => {
-    if (conv.messages.length) update(conv.id, (c) => ({ ...c, model }))
-    else setDraft((d) => ({ ...d, model }))
+  /** changes this chat's settings (stored once it has messages, else on the draft) */
+  const setConv = (fields: Partial<Conversation>) => {
+    if (conv.messages.length) update(conv.id, (c) => ({ ...c, ...fields }))
+    else setDraft((d) => ({ ...d, ...fields }))
   }
 
+  const setModel = (model: string) => setConv(conv.image ? { imageModel: model } : { model })
+
   const toggleWeb = () => {
-    const web = !conv.web
-    if (conv.messages.length) update(conv.id, (c) => ({ ...c, web }))
-    else setDraft((d) => ({ ...d, web }))
+    setConv({ web: !conv.web, image: false })
     textarea.current?.focus()
   }
+
+  const toggleImage = () => {
+    setConv({ image: !conv.image, web: false })
+    textarea.current?.focus()
+  }
+
+  const editing = conv.image && !!editTarget(conv.messages)
 
   const keyOpen = IS_LIVE ? !!live?.pendingRequest || !!keyOwner.current : false
 
@@ -487,10 +621,13 @@ export function ChatPage() {
       onSelect={select}
       onNew={startNew}
       onDelete={(id) => {
+        const gone = list.find((c) => c.id === id)
+        if (gone) void deleteImages(imageIds(gone))
         remove(id)
         if (id === activeId) setActiveId('')
       }}
       onClear={() => {
+        void deleteImages(list.flatMap(imageIds))
         clear()
         setActiveId('')
       }}
@@ -531,20 +668,30 @@ export function ChatPage() {
           <label className="relative">
             <span className="sr-only">Model</span>
             <select
-              value={conv.model}
+              value={conv.image ? imageModelOf(conv).id : conv.model}
               onChange={(e) => setModel(e.target.value)}
               disabled={sending}
               className="h-9 appearance-none rounded-md border border-line-2 bg-panel pl-3 pr-8 font-mono text-[11.5px] tracking-[0.04em] text-fg outline-none transition-colors hover:border-line-3 focus:border-line-3 disabled:opacity-50"
             >
-              {VENDORS.map((v) => (
-                <optgroup key={v} label={v}>
-                  {MODELS.filter((m) => m.vendor === v).map((m) => (
+              {conv.image ? (
+                <optgroup label="Image models">
+                  {IMAGE_MODELS.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}
                     </option>
                   ))}
                 </optgroup>
-              ))}
+              ) : (
+                VENDORS.map((v) => (
+                  <optgroup key={v} label={v}>
+                    {MODELS.filter((m) => m.vendor === v).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-dim" />
           </label>
@@ -575,7 +722,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -606,6 +753,28 @@ export function ChatPage() {
                 </p>
               </div>
             )}
+            {conv.image && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[10.5px] text-dim">
+                <span className="mr-1 tracking-[0.12em]">FORMAT</span>
+                {ASPECTS.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setConv({ aspect: a })}
+                    disabled={sending}
+                    aria-pressed={(conv.aspect ?? '1:1') === a}
+                    className={`h-6 rounded-md border px-2 transition-colors disabled:opacity-50 ${
+                      (conv.aspect ?? '1:1') === a ? 'border-eth/40 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+                <span className="ml-auto">
+                  ≈ {Math.round(imageModelOf(conv).approxUsd * 100)}¢ per image · {editing ? 'your next message edits the last image' : 'describe a picture'}
+                </span>
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">
               <Tooltip content={conv.web ? 'Web search is on: answers use live results and list sources. Adds a small search fee per message.' : 'Turn on web search for live results with sources.'}>
                 <button
@@ -622,6 +791,21 @@ export function ChatPage() {
                   <span className="hidden sm:inline">WEB</span>
                 </button>
               </Tooltip>
+              <Tooltip content={conv.image ? 'Image mode is on: each message makes or edits a picture. Images stay in this browser.' : 'Turn on image mode to create pictures privately.'}>
+                <button
+                  type="button"
+                  onClick={toggleImage}
+                  disabled={sending}
+                  aria-pressed={!!conv.image}
+                  aria-label="Image mode"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
+                    conv.image ? 'border-eth/40 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <ImageIcon className="size-3.5" />
+                  <span className="hidden sm:inline">IMAGE</span>
+                </button>
+              </Tooltip>
               <textarea
                 ref={textarea}
                 value={input}
@@ -636,9 +820,13 @@ export function ChatPage() {
                 disabled={!canSend}
                 placeholder={
                   canSend
-                    ? conv.web
-                      ? 'Search the web privately…'
-                      : 'Ask privately…'
+                    ? conv.image
+                      ? editing
+                        ? 'Describe a change, e.g. "make it night"…'
+                        : 'Describe an image…'
+                      : conv.web
+                        ? 'Search the web privately…'
+                        : 'Ask privately…'
                     : IS_LIVE && account.status === 'loading'
                       ? 'Connecting to zkAPI…'
                       : IS_LIVE && account.status === 'error'
@@ -665,7 +853,8 @@ export function ChatPage() {
             </div>
             <p className="mt-2 text-center font-mono text-[10px] leading-relaxed tracking-[0.04em] text-dim">
               <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt
-              {conv.web ? ' · search queries go to the search provider via OpenRouter' : ''} · your IP is visible to OpenRouter (use Tor or a VPN)
+              {conv.web ? ' · search queries go to the search provider via OpenRouter' : ''}
+              {conv.image ? ' · images are saved only in this browser' : ''} · your IP is visible to OpenRouter (use Tor or a VPN)
             </p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
+import type { ZkAccess, ZkClient } from '@openanonymity/zkapi-browser-sdk'
 import { LIVE } from '../config/mode'
 import { sleep } from '../lib/random'
 import { cannedChat } from '../protocol/responses'
@@ -10,15 +10,31 @@ export interface WireMessage {
   content: string
 }
 
-export interface SendHooks {
-  /** short status line while the request is being authorized / streamed */
+interface KeyHooks {
+  /** short status line while the request is being authorized / running */
   onPhase: (text: string) => void
+  signal?: AbortSignal
+}
+
+export interface SendHooks extends KeyHooks {
   onDelta: (text: string) => void
   /** web-search citations, when web search is on */
   onSources?: (s: Source[]) => void
-  signal?: AbortSignal
   /** answer with live web results (OpenRouter web plugin) */
   web?: boolean
+}
+
+export interface ImageRequest {
+  prompt: string
+  aspect: string
+  /** the previous image as a data URL, when this prompt edits it */
+  reference?: string | null
+}
+
+export interface GeneratedImage {
+  dataUrl: string
+  /** what OpenRouter charged for it, when reported */
+  costUsd?: number
 }
 
 /** OpenRouter's web plugin: a handful of results, engine picked by OpenRouter. */
@@ -32,11 +48,20 @@ const SYSTEM: WireMessage = {
 type SdkError = Error & { code?: string; status?: number }
 
 /**
- * One chat turn on the live zkAPI deployment. Each conversation owns its own
- * short-lived key (sessionId = conversation id): the key is reused for the
- * conversation's next messages and settled before another conversation starts.
+ * Runs one request on the live zkAPI deployment with this conversation's key.
+ * Each conversation owns its own short-lived key (sessionId = conversation id):
+ * the key is reused for the conversation's next messages and settled before
+ * another conversation starts. If the key's cap is used up, it is settled and
+ * renewed once.
  */
-export async function sendLive(client: ZkClient, sessionId: string, model: string, history: WireMessage[], hooks: SendHooks): Promise<void> {
+async function withKey(
+  client: ZkClient,
+  sessionId: string,
+  hooks: KeyHooks,
+  phase: string,
+  request: (access: ZkAccess) => Promise<Response>,
+  consume: (res: Response) => Promise<void>,
+): Promise<void> {
   const acquire = async () =>
     client.acquireInferenceAccess(sessionId, {
       spendingLimitUsd: LIVE.spendingLimitUsd,
@@ -57,15 +82,10 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
   }
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    hooks.onPhase(hooks.web ? 'Searching the web privately…' : 'Routing privately…')
+    hooks.onPhase(phase)
     let res: Response
     try {
-      res = await fetch(`${access.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: access.headers,
-        body: JSON.stringify({ model, stream: true, messages: [SYSTEM, ...history], ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}) }),
-        signal: hooks.signal,
-      })
+      res = await request(access)
     } catch (e) {
       access.release()
       throw e
@@ -80,13 +100,67 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
     }
     try {
       if (!res.ok || !res.body) throw new Error(await providerError(res))
-      hooks.onPhase('')
-      await readStream(res, hooks.onDelta, hooks.signal, hooks.onSources)
+      await consume(res)
       return
     } finally {
       access.release()
     }
   }
+}
+
+/** One chat turn on the live zkAPI deployment, streamed. */
+export async function sendLive(client: ZkClient, sessionId: string, model: string, history: WireMessage[], hooks: SendHooks): Promise<void> {
+  await withKey(
+    client,
+    sessionId,
+    hooks,
+    hooks.web ? 'Searching the web privately…' : 'Routing privately…',
+    (access) =>
+      fetch(`${access.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: access.headers,
+        body: JSON.stringify({ model, stream: true, messages: [SYSTEM, ...history], ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}) }),
+        signal: hooks.signal,
+      }),
+    async (res) => {
+      hooks.onPhase('')
+      await readStream(res, hooks.onDelta, hooks.signal, hooks.onSources)
+    },
+  )
+}
+
+/** One image on the live zkAPI deployment, via OpenRouter's image API. */
+export async function sendImageLive(client: ZkClient, sessionId: string, model: string, req: ImageRequest, hooks: KeyHooks): Promise<GeneratedImage> {
+  let out: GeneratedImage | null = null
+  await withKey(
+    client,
+    sessionId,
+    hooks,
+    req.reference ? 'Editing your image privately…' : 'Painting your image privately…',
+    (access) =>
+      fetch(`${access.baseUrl}/images`, {
+        method: 'POST',
+        headers: access.headers,
+        body: JSON.stringify({
+          model,
+          prompt: req.prompt,
+          aspect_ratio: req.aspect,
+          resolution: '1K',
+          n: 1,
+          ...(req.reference ? { input_references: [{ type: 'image_url', image_url: { url: req.reference } }] } : {}),
+        }),
+        signal: hooks.signal,
+      }),
+    async (res) => {
+      const json = (await res.json()) as { data?: { b64_json?: string; media_type?: string }[]; usage?: { cost?: number } }
+      const img = json.data?.[0]
+      if (!img?.b64_json) throw new Error('The image model returned no image. Try rewording the prompt.')
+      out = { dataUrl: `data:${img.media_type || 'image/png'};base64,${img.b64_json}`, costUsd: json.usage?.cost }
+      hooks.onPhase('')
+    },
+  )
+  if (!out) throw new Error('No image came back.')
+  return out
 }
 
 /** Demo mode: the canned router, streamed so it feels like the real thing. */
@@ -108,4 +182,62 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
     i += n
     await sleep(16)
   }
+}
+
+const ASPECT_PX: Record<string, [number, number]> = { '1:1': [1024, 1024], '16:9': [1344, 768], '9:16': [768, 1344] }
+
+/** Demo mode: a placeholder picture drawn in the browser, labelled as a demo. */
+export async function sendImageDemo(req: ImageRequest, hooks: KeyHooks): Promise<GeneratedImage> {
+  hooks.onPhase('Generating proof…')
+  await sleep(650)
+  hooks.onPhase('Request authorized…')
+  await sleep(350)
+  hooks.onPhase(req.reference ? 'Editing your image privately…' : 'Painting your image privately…')
+  await sleep(1400)
+  if (hooks.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  const [w, h] = ASPECT_PX[req.aspect] ?? ASPECT_PX['1:1']
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')!
+  let seed = [...req.prompt].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7)
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296)
+  const hue = Math.floor(rnd() * 360)
+  const g = ctx.createLinearGradient(0, 0, w, h)
+  g.addColorStop(0, `hsl(${hue} 55% 18%)`)
+  g.addColorStop(1, `hsl(${(hue + 60) % 360} 60% 8%)`)
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, w, h)
+  for (let i = 0; i < 14; i++) {
+    const x = rnd() * w
+    const y = rnd() * h
+    const r = 80 + rnd() * Math.min(w, h) * 0.4
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r)
+    rg.addColorStop(0, `hsla(${(hue + rnd() * 90) % 360} 80% 65% / 0.35)`)
+    rg.addColorStop(1, 'hsla(0 0% 0% / 0)')
+    ctx.fillStyle = rg
+    ctx.fillRect(0, 0, w, h)
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+  ctx.lineWidth = Math.min(w, h) * 0.018
+  const cx = w / 2
+  const cy = h / 2 - Math.min(w, h) * 0.06
+  const r = Math.min(w, h) * 0.12
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(cx - r * 0.9, cy + r * 0.9)
+  ctx.lineTo(cx + r * 0.9, cy - r * 0.9)
+  ctx.stroke()
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.textAlign = 'center'
+  ctx.font = `600 ${Math.round(Math.min(w, h) * 0.04)}px system-ui, sans-serif`
+  const label = req.prompt.length > 48 ? `${req.prompt.slice(0, 47)}…` : req.prompt
+  ctx.fillText(label, cx, cy + r * 2.1)
+  ctx.font = `500 ${Math.round(Math.min(w, h) * 0.024)}px ui-monospace, monospace`
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'
+  ctx.fillText('DEMO IMAGE · live mode uses a real image model', cx, cy + r * 2.75)
+  hooks.onPhase('')
+  return { dataUrl: c.toDataURL('image/jpeg', 0.9), costUsd: 0.067 }
 }

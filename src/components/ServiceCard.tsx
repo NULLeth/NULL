@@ -26,10 +26,10 @@ function Status({ status }: { status: ServiceInfo['status'] }) {
 }
 
 export function Price({ svc, className = '' }: { svc: ServiceInfo; className?: string }) {
-  if (IS_LIVE && (svc.kind === 'chat' || svc.kind === 'search')) {
+  if (IS_LIVE && svc.kind !== 'rpc') {
     return (
       <span className={`font-mono text-[13px] text-fg tnum ${className}`}>
-        METERED<span className="text-dim"> / {svc.kind === 'chat' ? 'TOKEN' : 'QUERY'}</span>
+        METERED<span className="text-dim"> / {svc.kind === 'chat' ? 'TOKEN' : svc.kind === 'search' ? 'QUERY' : 'IMAGE'}</span>
       </span>
     )
   }

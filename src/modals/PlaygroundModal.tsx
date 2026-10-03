@@ -170,7 +170,7 @@ export function PlaygroundModal({ open, initial }: { open: boolean; initial: Ser
             <div className="min-w-0">
               <div className="font-mono text-[13px] tracking-[0.14em] text-fg">{svc.name.toUpperCase()}</div>
               <div className="font-mono text-[11px] text-dim">
-                {IS_LIVE && svc.kind === 'chat' ? `${LIVE.models[svc.id]} · metered` : IS_LIVE && svc.kind === 'search' ? 'openrouter web search · metered' : `${svc.route} · ${fmtUsd(svc.priceUsd, { micro: true })} / ${svc.unit.toLowerCase()}`}
+                {IS_LIVE && svc.kind === 'chat' ? `${LIVE.models[svc.id]} · metered` : IS_LIVE && svc.kind === 'search' ? 'openrouter web search · metered' : IS_LIVE && svc.kind === 'image' ? 'openrouter image models · metered' : `${svc.route} · ${fmtUsd(svc.priceUsd, { micro: true })} / ${svc.unit.toLowerCase()}`}
               </div>
             </div>
             <div className="ml-auto text-right font-mono text-[11px] text-dim">
@@ -185,6 +185,21 @@ export function PlaygroundModal({ open, initial }: { open: boolean; initial: Ser
             <div className="mt-5">
               {svc.kind === 'chat' ? (
                 <LiveChat svc={svc} onDone={(id) => setLiveReq(id)} />
+              ) : svc.kind === 'image' ? (
+                <div className="rounded-md border border-line-2 px-4 py-4">
+                  <p className="text-[13.5px] leading-relaxed text-muted">
+                    Private image generation lives in NULL Chat. Turn on <span className="text-fg">Image</span>, describe a picture, then reply to edit it. Paid
+                    from your private balance, saved only in your browser.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      href="/chat?image=1"
+                      className="inline-flex h-8 items-center rounded-[6px] bg-fg px-3 font-mono text-[10.5px] uppercase tracking-[0.12em] text-bg transition-opacity hover:opacity-90"
+                    >
+                      Open chat with images
+                    </a>
+                  </div>
+                </div>
               ) : svc.kind === 'search' ? (
                 <div className="rounded-md border border-line-2 px-4 py-4">
                   <p className="text-[13.5px] leading-relaxed text-muted">

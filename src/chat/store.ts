@@ -16,6 +16,11 @@ export interface ChatMessage {
   /** answered with live web search */
   web?: boolean
   sources?: { url: string; title: string }[]
+  /** an image answer; the pictures themselves live in IndexedDB (see images.ts) */
+  image?: boolean
+  images?: { id: string; aspect: string; mime: string }[]
+  /** what the provider charged for this answer, when it reports it (USD) */
+  costUsd?: number
 }
 
 export interface Conversation {
@@ -29,6 +34,10 @@ export interface Conversation {
   spentEth: number
   /** web search on for this chat's next messages */
   web?: boolean
+  /** image mode: messages generate (or edit) images */
+  image?: boolean
+  imageModel?: string
+  aspect?: string
 }
 
 function load(): Conversation[] {
