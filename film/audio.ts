@@ -8,6 +8,7 @@ import { CUE, DURATION, typingTimes } from './launch'
 import { WEB_CUES, WEB_DURATION } from './web'
 import { MODELS_CUES, MODELS_DURATION } from './models'
 import { IMAGE_CUES, IMAGE_DURATION } from './image'
+import { TOR_CUES, TOR_DURATION } from './tor'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -265,6 +266,23 @@ export const imageSound: Soundtrack = (ctx, out) => {
   arrival(ctx, out, IMAGE_CUES.reveal2[0] + 0.1, 0.45)
   IMAGE_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, IMAGE_CUES.end + 0.1, 0.7)
+}
+
+/** Tor promo: a sweep per packet, a tick at each relay, the click, the check turning green. */
+export const torSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, TOR_DURATION, [1.0, TOR_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, TOR_CUES.row1[0], TOR_CUES.row1[1], 300, 1800, 0.045)
+  hit(ctx, out, TOR_CUES.row1[1], 0.25, 160, 70, 0.3)
+  sweep(ctx, out, TOR_CUES.row2[0], TOR_CUES.row2[1], 300, 2400, 0.045)
+  TOR_CUES.hops.forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66, 1318.51][i], 0.1))
+  tick(ctx, out, TOR_CUES.row2[1], 1479.98, 0.11)
+  tick(ctx, out, TOR_CUES.click, 1174.66, 0.12)
+  tick(ctx, out, TOR_CUES.checking, 987.77, 0.08)
+  arrival(ctx, out, TOR_CUES.green, 0.45)
+  tick(ctx, out, TOR_CUES.chip, 1318.51, 0.1)
+  TOR_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, TOR_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */
