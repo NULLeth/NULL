@@ -21,6 +21,10 @@
     {
       "source": "/studio",
       "destination": "/index.html"
+    },
+    {
+      "source": "/burn",
+      "destination": "/index.html"
     }
   ]
 }

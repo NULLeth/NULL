@@ -12,7 +12,7 @@ import { estimatedHead } from '../protocol/responses'
 import { scrollToId } from '../state/ui'
 import { HeroTerminal } from './HeroTerminal'
 import { CopyAddress } from '../components/ui/CopyAddress'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Flame } from 'lucide-react'
 import { IS_LIVE } from '../config/mode'
 import { useLive } from '../live/LiveProvider'
 
@@ -43,6 +43,9 @@ function TokenBar() {
         className="inline-flex items-center gap-1 font-mono text-[10.5px] tracking-[0.14em] text-muted transition-colors hover:text-fg"
       >
         UNISWAP <ArrowUpRight className="size-3" />
+      </a>
+      <a href="#burn" className="inline-flex items-center gap-1 font-mono text-[10.5px] tracking-[0.14em] text-warn/90 transition-colors hover:text-warn">
+        <Flame className="size-3" /> BUYBACK &amp; BURN
       </a>
     </div>
   )

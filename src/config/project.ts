@@ -17,6 +17,23 @@ export const PROJECT = {
     ca: '0x51aAa1D6eb8aDFF4Dd73518b825Fc0fE56627160' as string,
     /** dexscreener chain slug */
     chain: 'ethereum',
+    supply: 1_000_000_000,
+  },
+
+  /**
+   * Buyback & burn. $NULL launched on Stockpad (Uniswap v4 pool with Stockpad's hook): every
+   * trade pays a 1% fee, 0.5% to Stockpad and 0.5% to the creator wallet, credited in WETH to
+   * Stockpad's fee escrow. 100% of the creator share buys $NULL and sends it to the dead address.
+   * Everything below is public on Ethereum and read live by the site.
+   */
+  burn: {
+    creator: '0xe61C303A8796A838D08a4C864D6B7A455aB5C712',
+    escrow: '0xacefe251da006887da41c063d06cc82a060824ba',
+    dead: '0x000000000000000000000000000000000000dEaD',
+    weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    launchpad: 'Stockpad',
+    tradeFee: 0.01,
+    creatorShare: 0.005,
   },
 
   links: {
