@@ -1,4 +1,4 @@
-import { chatSound, howSound, imageSound, launchSound, modelsSound, torSound, webSound, type Soundtrack } from './audio'
+import { chatSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
@@ -6,6 +6,7 @@ import { WEB_DURATION, drawWeb } from './web'
 import { MODELS_DURATION, drawModels } from './models'
 import { IMAGE_DURATION, drawImageFilm } from './image'
 import { TOR_DURATION, drawTor } from './tor'
+import { SHIELD_DURATION, drawShield } from './shield'
 
 export interface Film {
   duration: number
@@ -15,6 +16,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  shield: { duration: SHIELD_DURATION, sound: shieldSound, draw: drawShield },
   tor: { duration: TOR_DURATION, sound: torSound, draw: drawTor },
   image: { duration: IMAGE_DURATION, sound: imageSound, draw: drawImageFilm },
   models: { duration: MODELS_DURATION, sound: modelsSound, draw: drawModels },

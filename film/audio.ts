@@ -9,6 +9,7 @@ import { WEB_CUES, WEB_DURATION } from './web'
 import { MODELS_CUES, MODELS_DURATION } from './models'
 import { IMAGE_CUES, IMAGE_DURATION } from './image'
 import { TOR_CUES, TOR_DURATION } from './tor'
+import { SHIELD_CUES, SHIELD_DURATION } from './shield'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -283,6 +284,20 @@ export const torSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, TOR_CUES.chip, 1318.51, 0.1)
   TOR_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, TOR_CUES.end + 0.1, 0.7)
+}
+
+/** Shield promo: typing, a tick per detected detail, the swap to placeholders, the fill-back, three layer checks. */
+export const shieldSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, SHIELD_DURATION, [1.0, SHIELD_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  const n = 48
+  for (let i = 0; i < n; i++) click(ctx, out, SHIELD_CUES.typeStart + ((SHIELD_CUES.typeEnd - SHIELD_CUES.typeStart) * i) / n, 0.08, 10000 + i * 29)
+  SHIELD_CUES.chips.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  sweep(ctx, out, SHIELD_CUES.panel[0], SHIELD_CUES.panel[1], 400, 2200, 0.04)
+  tick(ctx, out, SHIELD_CUES.send, 1318.51, 0.12)
+  SHIELD_CUES.morph.forEach((at, i) => tick(ctx, out, at, [1479.98, 1661.22, 1760][i], 0.1))
+  SHIELD_CUES.layers.forEach((at) => hit(ctx, out, at, 0.32, 130, 55, 0.4))
+  arrival(ctx, out, SHIELD_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */
