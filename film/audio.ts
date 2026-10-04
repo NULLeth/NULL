@@ -10,6 +10,7 @@ import { MODELS_CUES, MODELS_DURATION } from './models'
 import { IMAGE_CUES, IMAGE_DURATION } from './image'
 import { TOR_CUES, TOR_DURATION } from './tor'
 import { SHIELD_CUES, SHIELD_DURATION } from './shield'
+import { COMPARE_CUES, COMPARE_DURATION } from './compare'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -298,6 +299,21 @@ export const shieldSound: Soundtrack = (ctx, out) => {
   SHIELD_CUES.morph.forEach((at, i) => tick(ctx, out, at, [1479.98, 1661.22, 1760][i], 0.1))
   SHIELD_CUES.layers.forEach((at) => hit(ctx, out, at, 0.32, 130, 55, 0.4))
   arrival(ctx, out, SHIELD_CUES.end + 0.1, 0.7)
+}
+
+/** Compare promo: the switch, typing, two streams, a tick as each cost appears. */
+export const compareSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, COMPARE_DURATION, [1.0, COMPARE_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, COMPARE_CUES.toggle, 1174.66, 0.13)
+  const n = 34
+  for (let i = 0; i < n; i++) click(ctx, out, COMPARE_CUES.typeStart + ((COMPARE_CUES.typeEnd - COMPARE_CUES.typeStart) * i) / n, 0.09, 11000 + i * 31)
+  tick(ctx, out, COMPARE_CUES.send, 1318.51, 0.12)
+  sweep(ctx, out, COMPARE_CUES.streamB[0], COMPARE_CUES.streamA[1], 300, 2000, 0.035)
+  tick(ctx, out, COMPARE_CUES.streamB[1], 1479.98, 0.11)
+  tick(ctx, out, COMPARE_CUES.streamA[1], 1661.22, 0.11)
+  COMPARE_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, COMPARE_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */
