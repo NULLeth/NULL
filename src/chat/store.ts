@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IS_LIVE } from '../config/mode'
 import { randId } from '../lib/random'
+import type { ShieldMap } from './shield'
 
 /** Conversations live only in this browser. Nothing is stored on a server. Demo chats are kept apart. */
 const KEY = IS_LIVE ? 'null.chat.v1' : 'null.chat.demo.v1'
@@ -21,6 +22,10 @@ export interface ChatMessage {
   images?: { id: string; aspect: string; mime: string }[]
   /** what the provider charged for this answer, when it reports it (USD) */
   costUsd?: number
+  /** Prompt Shield: the text as the model saw (user) or wrote it (assistant), with placeholders */
+  wire?: string
+  /** how many details the shield hid in this user message */
+  shielded?: number
 }
 
 export interface Conversation {
@@ -38,6 +43,8 @@ export interface Conversation {
   image?: boolean
   imageModel?: string
   aspect?: string
+  /** Prompt Shield: real detail → placeholder, so a detail keeps its tag for the whole chat */
+  shieldMap?: ShieldMap
 }
 
 function load(): Conversation[] {

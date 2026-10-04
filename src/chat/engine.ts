@@ -4,6 +4,7 @@ import { sleep } from '../lib/random'
 import { cannedChat } from '../protocol/responses'
 import { cannedSearch } from '../protocol/responses'
 import { providerError, readStream, type Source } from '../live/stream'
+import { SHIELD_SYSTEM } from './shield'
 
 export interface WireMessage {
   role: 'user' | 'assistant' | 'system'
@@ -22,6 +23,8 @@ export interface SendHooks extends KeyHooks {
   onSources?: (s: Source[]) => void
   /** answer with live web results (OpenRouter web plugin) */
   web?: boolean
+  /** the history carries Prompt Shield placeholders */
+  shield?: boolean
 }
 
 export interface ImageRequest {
@@ -119,7 +122,12 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
       fetch(`${access.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: access.headers,
-        body: JSON.stringify({ model, stream: true, messages: [SYSTEM, ...history], ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}) }),
+        body: JSON.stringify({
+          model,
+          stream: true,
+          messages: [SYSTEM, ...(hooks.shield ? [{ role: 'system', content: SHIELD_SYSTEM }] : []), ...history],
+          ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}),
+        }),
         signal: hooks.signal,
       }),
     async (res) => {
@@ -174,7 +182,8 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   await sleep(hooks.web ? 900 : 450)
   hooks.onPhase('')
   if (hooks.web) hooks.onSources?.(cannedSearch(last).filter((h) => !h.url.startsWith('nullzk.com')).map((h) => ({ url: `https://${h.url}`, title: h.title })))
-  const text = cannedChat(last, model)
+  const tags = [...new Set(last.match(/\[[A-Z]+_\d+\]/g) ?? [])]
+  const text = hooks.shield && tags.length ? shieldDemo(tags) : cannedChat(last, model)
   for (let i = 0; i < text.length; ) {
     if (hooks.signal?.aborted) return
     const n = 3 + Math.floor(Math.random() * 5)
@@ -182,6 +191,23 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
     i += n
     await sleep(16)
   }
+}
+
+/** Demo answer for a shielded prompt: written with the placeholders only, like a real model would. */
+function shieldDemo(tags: string[]): string {
+  const name = tags.find((t) => t.startsWith('[NAME_'))
+  const contact = tags.filter((t) => /^\[(PHONE|EMAIL)_/.test(t))
+  const address = tags.find((t) => t.startsWith('[ADDRESS_'))
+  return [
+    'Here’s a short draft. I only saw placeholders; your browser filled the real details back in.',
+    '',
+    `Hi ${name ?? 'there'},`,
+    '',
+    address ? `I’m writing to let you know that I’ll be moving out of ${address} at the end of next month. Thank you for everything.` : 'Thanks for getting back to me so quickly.',
+    ...(contact.length ? ['', `You can reach me any time at ${contact.join(' or ')}.`] : []),
+    '',
+    'Best regards',
+  ].join('\n')
 }
 
 const ASPECT_PX: Record<string, [number, number]> = { '1:1': [1024, 1024], '16:9': [1344, 768], '9:16': [768, 1344] }

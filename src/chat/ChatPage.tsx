@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, ChevronDown, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -23,6 +23,7 @@ import { useUi } from '../state/ui'
 import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type WireMessage } from './engine'
 import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
 import { Markdown } from './Markdown'
+import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
 import { newConversation, newMessage, titleFrom, useConversations, type ChatMessage, type Conversation } from './store'
 
 const MODELS = LIVE.chatModels
@@ -57,6 +58,22 @@ const IMAGE_SUGGESTIONS = [
 /** `/chat?web=1` / `/chat?image=1` open a new chat with web search or image mode already on. */
 const WEB_FROM_URL = new URLSearchParams(window.location.search).get('web') === '1'
 const IMAGE_FROM_URL = new URLSearchParams(window.location.search).get('image') === '1'
+
+/** Prompt Shield settings live in this browser: on by default, plus words to always hide. */
+const SHIELD_KEY = 'null.shield.v1'
+function loadShield(): { on: boolean; words: string[] } {
+  try {
+    const j = JSON.parse(localStorage.getItem(SHIELD_KEY) ?? 'null') as { on?: unknown; words?: unknown } | null
+    if (j && typeof j.on === 'boolean' && Array.isArray(j.words)) return { on: j.on, words: j.words.filter((w): w is string => typeof w === 'string') }
+  } catch {
+    /* fall through */
+  }
+  return { on: true, words: [] }
+}
+
+/** What goes to the model: the shielded text where there is one. */
+const toWire = (msgs: ChatMessage[]): WireMessage[] =>
+  msgs.filter((m) => !m.error && (m.wire ?? m.content)).map((m) => ({ role: m.role, content: m.wire ?? m.content }))
 
 const mimeOf = (dataUrl: string) => dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png'
 const extOf = (mime: string) => (mime.includes('jpeg') ? 'jpg' : mime.split('/')[1] || 'png')
@@ -226,13 +243,20 @@ function RecoverDeposit({ amountEth }: { amountEth: number }) {
 }
 
 /** The line under the composer: what stays hidden, what doesn't, and the Tor status. */
-function PrivacyLine({ web, image }: { web: boolean; image: boolean }) {
+function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; shieldOn: boolean }) {
   const c = useConnection()
   const { open } = useUi()
   const tor = c.status === 'done' && c.tor
   return (
     <p className="mt-2 text-center font-mono text-[10px] leading-relaxed tracking-[0.04em] text-dim">
-      <span className="text-ok/80">payment identity hidden</span> · the model provider reads your prompt
+      <span className="text-ok/80">payment identity hidden</span> ·{' '}
+      {shieldOn ? (
+        <>
+          <span className="text-ok/80">personal details shielded</span>, the model reads the rest
+        </>
+      ) : (
+        'the model provider reads your prompt'
+      )}
       {web ? ' · search queries go to the search provider via OpenRouter' : ''}
       {image ? ' · images are saved only in this browser' : ''} ·{' '}
       {tor ? (
@@ -248,6 +272,105 @@ function PrivacyLine({ web, image }: { web: boolean; image: boolean }) {
         </>
       )}
     </p>
+  )
+}
+
+/** Above the composer: what the shield will hide in the message being typed. */
+function ShieldBar({
+  hits,
+  skip,
+  onToggle,
+  words,
+  onWords,
+}: {
+  hits: ShieldHit[]
+  skip: Set<string>
+  onToggle: (value: string) => void
+  words: string[]
+  onWords: (w: string[]) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [word, setWord] = useState('')
+  const hidden = hits.filter((h) => !skip.has(h.value)).length
+  const add = () => {
+    const w = word.trim()
+    if (w.length >= 2 && !words.includes(w)) onWords([...words, w])
+    setWord('')
+  }
+  return (
+    <div className="mb-2 font-mono text-[10.5px]">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 tracking-[0.12em] text-ok/90">
+          <ShieldCheck className="size-3.5" />
+          SHIELD
+        </span>
+        <span className="text-dim">{hits.length ? `${hidden} of ${hits.length} hidden from the AI` : 'nothing personal found'}</span>
+        {hits.map((h) => {
+          const off = skip.has(h.value)
+          return (
+            <button
+              key={h.start}
+              type="button"
+              onClick={() => onToggle(h.value)}
+              title={off ? 'Will be sent as written. Click to hide it.' : 'Hidden from the AI. Click to send it as written.'}
+              className={`h-6 max-w-[240px] truncate rounded-md border px-2 transition-colors ${
+                off ? 'border-line-2 text-dim line-through' : 'border-ok/30 bg-ok/[0.06] text-ok/90 hover:border-ok/50'
+              }`}
+            >
+              {KIND_LABEL[h.kind]} · {h.value}
+            </button>
+          )
+        })}
+        <button type="button" onClick={() => setAdding((a) => !a)} className="ml-auto text-dim transition-colors hover:text-soft">
+          {adding ? 'done' : '+ always hide…'}
+        </button>
+      </div>
+      {adding && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              add()
+            }}
+          >
+            <input
+              autoFocus
+              value={word}
+              onChange={(e) => setWord(e.target.value)}
+              placeholder="a name, company or place"
+              className="h-6 w-48 rounded-md border border-line-2 bg-panel px-2 text-soft outline-none placeholder:text-faint focus:border-line-3"
+            />
+          </form>
+          {words.map((w) => (
+            <span key={w} className="inline-flex h-6 items-center gap-1 rounded-md border border-line-2 px-2 text-soft">
+              {w}
+              <button type="button" aria-label={`Stop hiding ${w}`} onClick={() => onWords(words.filter((x) => x !== w))} className="text-dim hover:text-fg">
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          {!words.length && <span className="text-faint">saved in this browser only</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UserBubble({ m }: { m: ChatMessage }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="flex flex-col items-end">
+      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md border border-line-2 bg-white/[0.045] px-4 py-2.5 text-[15px] leading-relaxed text-fg">{m.content}</div>
+      {!!m.shielded && (
+        <div className="mt-1.5 flex max-w-[85%] flex-col items-end gap-1.5">
+          <button type="button" onClick={() => setShow((s) => !s)} className="inline-flex items-center gap-1 font-mono text-[10.5px] text-ok/80 hover:text-ok">
+            <ShieldCheck className="size-3" />
+            {m.shielded} hidden from the AI · {show ? 'hide' : 'show what it saw'}
+          </button>
+          {show && <div className="whitespace-pre-wrap rounded-lg border border-line px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">{m.wire}</div>}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -270,7 +393,7 @@ function ExpiryWarning({ expiryTs }: { expiryTs: number }) {
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
-function EmptyState({ onPick, disabled, web, image }: { onPick: (s: string) => void; disabled: boolean; web: boolean; image: boolean }) {
+function EmptyState({ onPick, disabled, web, image, shieldOn }: { onPick: (s: string) => void; disabled: boolean; web: boolean; image: boolean; shieldOn: boolean }) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
       <LogoMark className="size-11 text-fg" />
@@ -300,6 +423,12 @@ function EmptyState({ onPick, disabled, web, image }: { onPick: (s: string) => v
           ? `${IMAGE_MODELS.length} image models · Nano Banana 2 by default · about ${Math.round(IMAGE_MODELS[0].approxUsd * 100)}¢ per image`
           : `${MODELS.length - 1} models · Claude, GPT, Gemini, Grok, DeepSeek, Kimi, Llama and more · switch any time at the top`}
       </p>
+      {shieldOn && (
+        <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-ok/80">
+          <ShieldCheck className="size-3" />
+          Prompt Shield is on: names, emails, numbers and addresses are swapped for placeholders before sending
+        </p>
+      )}
     </div>
   )
 }
@@ -387,9 +516,7 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
     <div className="mx-auto w-full max-w-[780px] space-y-7 px-4 py-8 sm:px-6">
       {conv.messages.map((m, i) =>
         m.role === 'user' ? (
-          <div key={m.id} className="flex justify-end">
-            <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md border border-line-2 bg-white/[0.045] px-4 py-2.5 text-[15px] leading-relaxed text-fg">{m.content}</div>
-          </div>
+          <UserBubble key={m.id} m={m} />
         ) : (
           <div key={m.id} className="flex gap-3.5">
             <span className="mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-line-2 text-soft">
@@ -434,6 +561,14 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                   )}
                   {m.ms != null && <span>{(m.ms / 1000).toFixed(1)}s</span>}
                   {m.costUsd != null && <span>{fmtUsd(m.costUsd, { cents: true })}</span>}
+                  {m.wire != null && m.wire !== m.content && (
+                    <Tooltip content="The model wrote placeholders. Your browser filled the real details back in.">
+                      <span className="inline-flex items-center gap-1 text-ok/80">
+                        <ShieldCheck className="size-3" />
+                        shield
+                      </span>
+                    </Tooltip>
+                  )}
                   <Tooltip content="Paid from your private balance with a zero-knowledge proof. The provider never saw your wallet.">
                     <span className="text-ok/80">paid by proof ✓</span>
                   </Tooltip>
@@ -465,6 +600,8 @@ export function ChatPage() {
     image: IMAGE_FROM_URL,
   }))
   const [input, setInput] = useState('')
+  const [shieldCfg, setShieldCfg] = useState(loadShield)
+  const [skip, setSkip] = useState<Set<string>>(() => new Set())
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
@@ -482,6 +619,16 @@ export function ChatPage() {
   useEffect(() => {
     document.title = 'NULL Chat · private AI'
   }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHIELD_KEY, JSON.stringify(shieldCfg))
+    } catch {
+      /* settings stay for this tab */
+    }
+  }, [shieldCfg])
+
+  const hits = useMemo(() => (shieldCfg.on && input.trim() ? detect(input, shieldCfg.words) : []), [input, shieldCfg])
 
   // keep the newest text in view while streaming
   useEffect(() => {
@@ -553,6 +700,7 @@ export function ChatPage() {
       const t0 = performance.now()
       let text = ''
       let sources: Source[] = []
+      const shielded = !!target.shieldMap && Object.keys(target.shieldMap).length > 0
       const patch = (fields: Partial<ChatMessage>) =>
         update(withReply.id, (c) => ({ ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === reply.id ? { ...m, ...fields } : m)) }))
       const hooks = {
@@ -560,9 +708,10 @@ export function ChatPage() {
         onPhase: (p: string) => setPhase(p),
         onDelta: (d: string) => {
           text += d
-          patch({ content: text })
+          patch(shielded ? { wire: text, content: restore(text, target.shieldMap ?? {}) } : { content: text })
         },
         web: !!target.web,
+        shield: shielded,
         onSources: (s: Source[]) => {
           const next = mergeSources(sources, s)
           if (next.length === sources.length) return
@@ -572,7 +721,8 @@ export function ChatPage() {
       }
       try {
         if (target.image) {
-          const prompt = [...target.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
+          const lastUser = [...target.messages].reverse().find((m) => m.role === 'user')
+          const prompt = lastUser?.wire ?? lastUser?.content ?? ''
           const prior = editTarget(target.messages.slice(0, -1))
           const req = { prompt, aspect: target.aspect ?? '1:1', reference: prior ? await getImageDataUrl(prior.id) : null }
           let img: GeneratedImage
@@ -618,12 +768,22 @@ export function ChatPage() {
   const send = (text: string) => {
     const content = text.trim()
     if (!content || sending || !canSend) return
-    const user = newMessage('user', content)
+    // Prompt Shield: swap personal details for placeholders before anything leaves the browser
+    let map = conv.shieldMap ?? {}
+    let extra: Partial<ChatMessage> = {}
+    if (shieldCfg.on) {
+      const s = shield(content, detect(content, shieldCfg.words), map, skip)
+      if (s.used.length) {
+        map = s.map
+        extra = { wire: s.text, shielded: s.used.length }
+      }
+    }
+    const user = newMessage('user', content, extra)
     const base = conv.messages.length ? conv : { ...conv, title: titleFrom(content) }
-    const next = { ...base, messages: [...base.messages, user], updatedAt: Date.now() }
+    const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
     setInput('')
-    const history: WireMessage[] = next.messages.filter((m) => !m.error && m.content).map((m) => ({ role: m.role, content: m.content }))
-    void run(next, history)
+    setSkip(new Set())
+    void run(next, toWire(next.messages))
   }
 
   const retry = () => {
@@ -631,8 +791,7 @@ export function ChatPage() {
     const last = msgs[msgs.length - 1]
     if (!last || last.role !== 'assistant') return
     const trimmed = { ...conv, messages: msgs.slice(0, -1) }
-    const history: WireMessage[] = trimmed.messages.filter((m) => !m.error && m.content).map((m) => ({ role: m.role, content: m.content }))
-    void run(trimmed, history)
+    void run(trimmed, toWire(trimmed.messages))
   }
 
   const startNew = () => {
@@ -791,7 +950,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -845,6 +1004,22 @@ export function ChatPage() {
                 </span>
               </div>
             )}
+            {shieldCfg.on && input.trim() && (
+              <ShieldBar
+                hits={hits}
+                skip={skip}
+                onToggle={(v) =>
+                  setSkip((s) => {
+                    const n = new Set(s)
+                    if (n.has(v)) n.delete(v)
+                    else n.add(v)
+                    return n
+                  })
+                }
+                words={shieldCfg.words}
+                onWords={(words) => setShieldCfg((c) => ({ ...c, words }))}
+              />
+            )}
             <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">
               <Tooltip content={conv.web ? 'Web search is on: answers use live results and list sources. Adds a small search fee per message.' : 'Turn on web search for live results with sources.'}>
                 <button
@@ -874,6 +1049,26 @@ export function ChatPage() {
                 >
                   <ImageIcon className="size-3.5" />
                   <span className="hidden sm:inline">IMAGE</span>
+                </button>
+              </Tooltip>
+              <Tooltip
+                content={
+                  shieldCfg.on
+                    ? 'Prompt Shield is on: names, emails, phone numbers, addresses, wallets and keys are swapped for placeholders in your browser before sending.'
+                    : 'Prompt Shield is off: messages are sent exactly as written.'
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => setShieldCfg((c) => ({ ...c, on: !c.on }))}
+                  aria-pressed={shieldCfg.on}
+                  aria-label="Prompt Shield"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors ${
+                    shieldCfg.on ? 'border-ok/35 bg-ok/[0.08] text-ok/90' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <ShieldCheck className="size-3.5" />
+                  <span className="hidden sm:inline">SHIELD</span>
                 </button>
               </Tooltip>
               <textarea
@@ -921,7 +1116,7 @@ export function ChatPage() {
                 </button>
               )}
             </div>
-            <PrivacyLine web={!!conv.web} image={!!conv.image} />
+            <PrivacyLine web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} />
           </div>
         </div>
       </main>
