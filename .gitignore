@@ -5,3 +5,9 @@ public/zkapi/
 brand/film/shots/
 brand/film/*.mp4
 brand/film/NULL-Film.html
+
+# buyback bot: secrets and local state never go to git
+buyback-bot/.env
+buyback-bot/state.json
+buyback-bot/log.jsonl
+buyback-bot/bot.lock

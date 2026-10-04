@@ -1,0 +1,13 @@
+{
+  "name": "null-buyback-bot",
+  "private": true,
+  "type": "module",
+  "description": "Claims $NULL creator fees from Stockpad's escrow and burns a share of them, every 20 minutes.",
+  "scripts": {
+    "start": "node bot.mjs",
+    "once": "node bot.mjs --once"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}

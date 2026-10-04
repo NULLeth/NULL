@@ -118,7 +118,8 @@ export default function BurnPage() {
         </a>
         <h1 className="mt-8 text-[28px] font-medium tracking-[-0.02em]">Buy back and burn {ticker}</h1>
         <p className="mt-3 text-[14.5px] leading-relaxed text-muted">
-          Three steps, each one a normal transaction you sign in your wallet. Nothing happens without your signature, and burns can never be undone.
+          Manual fallback for the buyback bot. Three steps, each one a normal transaction you sign in your wallet. Nothing happens without your signature,
+          and burns can never be undone. The commitment is {PROJECT.burn.burnShare * 100}% of the claimed fees.
         </p>
 
         {/* wallet */}
@@ -178,7 +179,7 @@ export default function BurnPage() {
             <h2 className="text-[15px] font-medium">Buy {ticker} with it</h2>
           </div>
           <p className="mt-2 text-[13.5px] text-muted">
-            WETH in this wallet: <span className="text-fg">{wethBal == null ? '—' : `${fmt(wethBal, 5)} WETH`}</span>. Swap all of it for {ticker}, on Uniswap or on
+            WETH in this wallet: <span className="text-fg">{wethBal == null ? '—' : `${fmt(wethBal, 5)} WETH`}</span>. Swap {PROJECT.burn.burnShare * 100}% of what you claimed for {ticker}, on Uniswap or on
             the {ticker} page on {PROJECT.burn.launchpad}.
           </p>
           <a href={BUY_URL} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.12em] text-soft hover:text-fg">

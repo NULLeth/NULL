@@ -45,7 +45,7 @@ export interface BurnStats {
   /** $NULL held by the dead address (by anyone) */
   burned: number
   burnedPct: number
-  /** creator fees waiting in Stockpad's escrow for the next buyback (ETH) */
+  /** the buyback share of the creator fees waiting in Stockpad's escrow (ETH) */
   feesWaitingEth: number
   /** burns sent from the creator wallet, newest first */
   burns: Burn[]
@@ -84,7 +84,7 @@ export async function fetchBurnStats(): Promise<BurnStats> {
   return {
     burned,
     burnedPct: (burned / PROJECT.token.supply) * 100,
-    feesWaitingEth: Number(fees) / 1e18,
+    feesWaitingEth: (Number(fees) / 1e18) * PROJECT.burn.burnShare,
     burns,
     updatedAt: Date.now(),
   }

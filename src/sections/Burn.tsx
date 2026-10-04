@@ -61,14 +61,15 @@ export function Burn() {
             <span className="text-muted">BUYBACK &amp; BURN</span>
           </div>
           <h2 className="font-mono text-[22px] font-medium leading-[1.25] tracking-[0.04em] text-fg sm:text-[26px]">
-            100% OF CREATOR FEES
+            {burn.burnShare * 100}% OF CREATOR FEES
             <br />
             BUY BACK AND BURN {token.ticker}
           </h2>
           <p className="mt-6 text-[15.5px] leading-relaxed text-muted">
-            Every {token.ticker} trade pays a {burn.tradeFee * 100}% fee on {burn.launchpad}: half goes to the launchpad, half to the NULL creator wallet. All
-            of the creator half is used to buy {token.ticker} on the open market and send it to the dead address, where nobody can ever move it again. Every
-            step is a public transaction you can check below.
+            Every {token.ticker} trade pays a {burn.tradeFee * 100}% fee on {burn.launchpad}: half goes to the launchpad, half to the NULL creator wallet. Every{' '}
+            {burn.everyMinutes} minutes a bot claims the creator fees and uses {burn.burnShare * 100}% of them to buy {token.ticker} on the open market and send
+            it to the dead address, where nobody can ever move it again. The other {100 - burn.burnShare * 100}% funds NULL&apos;s development. Every step is a
+            public transaction you can check below.
           </p>
         </motion.div>
 
@@ -85,7 +86,7 @@ export function Burn() {
             label="FEES FOR NEXT BUYBACK"
             value={stats?.feesWaitingEth ?? 0}
             format={(v) => `${v.toFixed(4)} ETH`}
-            note={stats ? `≈ ${fmtUsd(stats.feesWaitingEth * ethUsd)} waiting in ${burn.launchpad}'s fee escrow` : '—'}
+            note={stats ? `≈ ${fmtUsd(stats.feesWaitingEth * ethUsd)} · ${burn.burnShare * 100}% of the fees waiting in the escrow` : '—'}
           />
           <NetworkStat
             index={2}

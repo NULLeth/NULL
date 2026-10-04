@@ -23,7 +23,8 @@ export const PROJECT = {
   /**
    * Buyback & burn. $NULL launched on Stockpad (Uniswap v4 pool with Stockpad's hook): every
    * trade pays a 1% fee, 0.5% to Stockpad and 0.5% to the creator wallet, credited in WETH to
-   * Stockpad's fee escrow. 100% of the creator share buys $NULL and sends it to the dead address.
+   * Stockpad's fee escrow. Half of the creator share buys $NULL and sends it to the dead address,
+   * automatically (buyback-bot/, every 20 minutes); the other half funds development.
    * Everything below is public on Ethereum and read live by the site.
    */
   burn: {
@@ -34,6 +35,10 @@ export const PROJECT = {
     launchpad: 'Stockpad',
     tradeFee: 0.01,
     creatorShare: 0.005,
+    /** share of the creator fees that goes to buyback & burn */
+    burnShare: 0.5,
+    /** how often the buyback bot runs */
+    everyMinutes: 20,
   },
 
   links: {
