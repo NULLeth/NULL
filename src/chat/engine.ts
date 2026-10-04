@@ -25,6 +25,8 @@ export interface SendHooks extends KeyHooks {
   web?: boolean
   /** the history carries Prompt Shield placeholders */
   shield?: boolean
+  /** what this answer cost, in USD, as reported by OpenRouter */
+  onCost?: (usd: number) => void
 }
 
 export interface ImageRequest {
@@ -132,7 +134,7 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
       }),
     async (res) => {
       hooks.onPhase('')
-      await readStream(res, hooks.onDelta, hooks.signal, hooks.onSources)
+      await readStream(res, hooks.onDelta, hooks.signal, hooks.onSources, hooks.onCost)
     },
   )
 }
@@ -191,6 +193,14 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
     i += n
     await sleep(16)
   }
+  hooks.onCost?.(demoCost(model, history, text))
+}
+
+/** Demo only: a plausible per-answer cost from rough token counts and the model's price tier. */
+function demoCost(model: string, history: WireMessage[], answer: string): number {
+  const tokens = (history.reduce((n, m) => n + m.content.length, 0) + answer.length) / 4
+  const tier = /opus/.test(model) ? 2.5 : /haiku|luna|flash|deepseek|glm|llama|mistral/.test(model) ? 0.2 : 1
+  return tokens * 0.000006 * tier
 }
 
 /** Demo answer for a shielded prompt: written with the placeholders only, like a real model would. */

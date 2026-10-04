@@ -20,9 +20,16 @@ function sourcesFrom(list: Annotation[] | undefined): Source[] {
 
 /**
  * Reads an OpenAI-style SSE stream: onDelta gets each text chunk, onSources gets
- * any web-search citations as they arrive.
+ * any web-search citations as they arrive, onCost gets what OpenRouter charged
+ * (usage.cost, in USD, sent with the last chunk).
  */
-export async function readStream(res: Response, onDelta: (t: string) => void, signal?: AbortSignal, onSources?: (s: Source[]) => void) {
+export async function readStream(
+  res: Response,
+  onDelta: (t: string) => void,
+  signal?: AbortSignal,
+  onSources?: (s: Source[]) => void,
+  onCost?: (usd: number) => void,
+) {
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()
   let buf = ''
@@ -45,8 +52,10 @@ export async function readStream(res: Response, onDelta: (t: string) => void, si
         const json = JSON.parse(data) as {
           choices?: { delta?: { content?: string; annotations?: Annotation[] }; message?: { annotations?: Annotation[] } }[]
           error?: { message?: string }
+          usage?: { cost?: number }
         }
         if (json.error) throw new Error(json.error.message ?? 'Provider error')
+        if (typeof json.usage?.cost === 'number' && onCost) onCost(json.usage.cost)
         const choice = json.choices?.[0]
         const t = choice?.delta?.content
         if (t) onDelta(t)

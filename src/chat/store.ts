@@ -6,6 +6,17 @@ import type { ShieldMap } from './shield'
 /** Conversations live only in this browser. Nothing is stored on a server. Demo chats are kept apart. */
 const KEY = IS_LIVE ? 'null.chat.v1' : 'null.chat.demo.v1'
 
+/** The second model's answer to the same message, in compare mode. */
+export interface AltAnswer {
+  model: string
+  content: string
+  wire?: string
+  ms?: number
+  costUsd?: number
+  error?: string
+  sources?: { url: string; title: string }[]
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -26,6 +37,8 @@ export interface ChatMessage {
   wire?: string
   /** how many details the shield hid in this user message */
   shielded?: number
+  /** compare mode: the second model's answer, shown next to this one */
+  alt?: AltAnswer
 }
 
 export interface Conversation {
@@ -45,6 +58,9 @@ export interface Conversation {
   aspect?: string
   /** Prompt Shield: real detail → placeholder, so a detail keeps its tag for the whole chat */
   shieldMap?: ShieldMap
+  /** compare mode: every message also goes to model2 */
+  compare?: boolean
+  model2?: string
 }
 
 function load(): Conversation[] {

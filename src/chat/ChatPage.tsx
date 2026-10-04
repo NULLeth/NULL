@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, ChevronDown, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
+import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -20,11 +21,11 @@ import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
-import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type WireMessage } from './engine'
+import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type SendHooks, type WireMessage } from './engine'
 import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
-import { newConversation, newMessage, titleFrom, useConversations, type ChatMessage, type Conversation } from './store'
+import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatMessage, type Conversation } from './store'
 
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
@@ -33,6 +34,11 @@ const DEFAULT_IMAGE_MODEL = IMAGE_MODELS[0].id
 const imageModelOf = (c: Conversation) => IMAGE_MODELS.find((m) => m.id === c.imageModel) ?? IMAGE_MODELS[0]
 const modelLabel = (id: string) => MODELS.find((m) => m.id === id)?.label ?? IMAGE_MODELS.find((m) => m.id === id)?.label ?? id
 const ASPECTS = ['1:1', '16:9', '9:16'] as const
+/** compare mode's default second model: Grok, or Claude when Grok is already the first */
+const secondModel = (first: string) => (first.startsWith('x-ai/') ? DEFAULT_MODEL : 'x-ai/grok-4.7')
+/** 0.0031 → "0.31¢", 0.067 → "$0.067" */
+const fmtCost = (usd: number) => (usd < 0.01 ? `${(usd * 100).toFixed(usd < 0.001 ? 3 : 2)}¢` : `$${usd.toFixed(usd < 1 ? 3 : 2)}`)
+const COST_TIP = 'What this answer cost, as reported by OpenRouter. Paid from your private balance.'
 /** vendors in list order, for the grouped model picker */
 const VENDORS = [...new Set(MODELS.map((m) => m.vendor))]
 const SUGGESTIONS = [
@@ -71,9 +77,16 @@ function loadShield(): { on: boolean; words: string[] } {
   return { on: true, words: [] }
 }
 
-/** What goes to the model: the shielded text where there is one. */
-const toWire = (msgs: ChatMessage[]): WireMessage[] =>
-  msgs.filter((m) => !m.error && (m.wire ?? m.content)).map((m) => ({ role: m.role, content: m.wire ?? m.content }))
+/**
+ * What goes to the model: the shielded text where there is one. In compare mode each
+ * model gets its own thread: side 'b' sees the second model's earlier answers.
+ */
+const toWire = (msgs: ChatMessage[], side: 'a' | 'b' = 'a'): WireMessage[] =>
+  msgs.flatMap((m) => {
+    const src: ChatMessage | AltAnswer = side === 'b' && m.role === 'assistant' && m.alt ? m.alt : m
+    const text = src.wire ?? src.content
+    return src.error || !text ? [] : [{ role: m.role, content: text }]
+  })
 
 const mimeOf = (dataUrl: string) => dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png'
 const extOf = (mime: string) => (mime.includes('jpeg') ? 'jpg' : mime.split('/')[1] || 'png')
@@ -187,7 +200,8 @@ function Sidebar({
             <button type="button" onClick={() => onSelect(c.id)} className="min-w-0 flex-1 px-3 py-2 text-left">
               <div className={`truncate text-[13px] ${c.id === activeId ? 'text-fg' : 'text-soft'}`}>{c.title}</div>
               <div className="mt-0.5 truncate font-mono text-[10.5px] text-dim">
-                {modelLabel(c.image ? (c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.model)} · {ago(c.updatedAt, now)}
+                {c.image ? modelLabel(c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.compare ? `${modelLabel(c.model)} vs ${modelLabel(c.model2 ?? secondModel(c.model))}` : modelLabel(c.model)} ·{' '}
+                {ago(c.updatedAt, now)}
               </div>
             </button>
             <button
@@ -393,13 +407,31 @@ function ExpiryWarning({ expiryTs }: { expiryTs: number }) {
 
 // ─── messages ────────────────────────────────────────────────────────────────
 
-function EmptyState({ onPick, disabled, web, image, shieldOn }: { onPick: (s: string) => void; disabled: boolean; web: boolean; image: boolean; shieldOn: boolean }) {
+function EmptyState({
+  onPick,
+  disabled,
+  web,
+  image,
+  shieldOn,
+  compare,
+}: {
+  onPick: (s: string) => void
+  disabled: boolean
+  web: boolean
+  image: boolean
+  shieldOn: boolean
+  compare: boolean
+}) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
       <LogoMark className="size-11 text-fg" />
-      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">{image ? 'Imagine privately.' : web ? 'Search privately.' : 'Ask privately.'}</h1>
+      <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">
+        {image ? 'Imagine privately.' : compare ? 'Compare privately.' : web ? 'Search privately.' : 'Ask privately.'}
+      </h1>
       <p className="mt-3 max-w-[480px] text-[14.5px] leading-relaxed text-muted">
-        {image
+        {compare
+          ? 'Compare is on: every message goes to two models and both answers appear side by side, each with its own time and cost.'
+          : image
           ? 'Image mode is on: describe a picture and it appears here. Reply to edit it. Images are saved only in this browser.'
           : web
             ? 'Web search is on: answers use live results and list their sources. Paid from your private balance like every request.'
@@ -511,12 +543,83 @@ function ImagePending({ aspect, phase }: { aspect: string; phase: string }) {
   )
 }
 
-function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; phase: string; streamingId: string | null; onRetry: () => void }) {
+/** One model's answer inside a compare row. */
+function AnswerPane({ a, streaming, phase }: { a: AltAnswer; streaming: boolean; phase: string }) {
+  const done = !streaming || a.ms != null || !!a.error
   return (
-    <div className="mx-auto w-full max-w-[780px] space-y-7 px-4 py-8 sm:px-6">
+    <div className="min-w-0 rounded-xl border border-line-2 bg-panel/40 px-4 py-3.5">
+      <div className="mb-2.5 flex items-center justify-between gap-2 font-mono text-[10.5px] tracking-[0.08em]">
+        <span className="text-fg">{modelLabel(a.model)}</span>
+        {a.costUsd != null && (
+          <Tooltip content={COST_TIP}>
+            <span className="text-soft">{fmtCost(a.costUsd)}</span>
+          </Tooltip>
+        )}
+      </div>
+      {a.content ? <Markdown text={a.content} /> : null}
+      {!done && !a.content && (
+        <div className="flex items-center gap-2.5 py-1 font-mono text-[12px] text-muted">
+          <Spinner className="size-3.5" />
+          {phase || 'Thinking…'}
+        </div>
+      )}
+      {!done && a.content && <span className="ml-0.5 inline-block w-[7px] animate-blink text-eth">▍</span>}
+      {!!a.sources?.length && <Sources list={a.sources} />}
+      {a.error && <div className="mt-2 rounded-md border border-bad/25 bg-bad/[0.05] px-3 py-2 text-[13px] text-bad/90">{a.error}</div>}
+      {done && !a.error && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10.5px] text-dim">
+          {a.ms != null && <span>{(a.ms / 1000).toFixed(1)}s</span>}
+          {a.wire != null && a.wire !== a.content && (
+            <span className="inline-flex items-center gap-1 text-ok/80">
+              <ShieldCheck className="size-3" />
+              shield
+            </span>
+          )}
+          <span className="text-ok/80">paid by proof ✓</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Compare mode: the same message answered by two models, side by side. */
+function CompareRow({ m, phase, streaming, onRetry }: { m: ChatMessage; phase: string; streaming: boolean; onRetry?: () => void }) {
+  const first: AltAnswer = { model: m.model ?? '', content: m.content, wire: m.wire, ms: m.ms, costUsd: m.costUsd, error: m.error, sources: m.sources }
+  const both = (m.costUsd ?? 0) + (m.alt?.costUsd ?? 0)
+  return (
+    <div className="flex gap-3.5">
+      <span className="mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-line-2 text-soft">
+        <Columns2 className="size-3.5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="grid gap-3 md:grid-cols-2">
+          <AnswerPane a={first} streaming={streaming} phase={phase} />
+          {m.alt && <AnswerPane a={m.alt} streaming={streaming} phase={phase} />}
+        </div>
+        {!streaming && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[10.5px] text-dim">
+            {both > 0 && <span>both answers {fmtCost(both)}</span>}
+            {onRetry && (m.error || m.alt?.error) && (
+              <button type="button" onClick={onRetry} className="tracking-[0.12em] text-soft underline-offset-2 hover:underline">
+                RETRY
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; phase: string; streamingId: string | null; onRetry: () => void }) {
+  const wide = conv.messages.some((m) => m.alt)
+  return (
+    <div className={`mx-auto w-full ${wide ? 'max-w-[1120px]' : 'max-w-[780px]'} space-y-7 px-4 py-8 sm:px-6`}>
       {conv.messages.map((m, i) =>
         m.role === 'user' ? (
           <UserBubble key={m.id} m={m} />
+        ) : m.alt ? (
+          <CompareRow key={m.id} m={m} phase={phase} streaming={streamingId === m.id} onRetry={i === conv.messages.length - 1 ? onRetry : undefined} />
         ) : (
           <div key={m.id} className="flex gap-3.5">
             <span className="mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-line-2 text-soft">
@@ -560,7 +663,11 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                     </span>
                   )}
                   {m.ms != null && <span>{(m.ms / 1000).toFixed(1)}s</span>}
-                  {m.costUsd != null && <span>{fmtUsd(m.costUsd, { cents: true })}</span>}
+                  {m.costUsd != null && (
+                    <Tooltip content={COST_TIP}>
+                      <span className="text-soft">{fmtCost(m.costUsd)}</span>
+                    </Tooltip>
+                  )}
                   {m.wire != null && m.wire !== m.content && (
                     <Tooltip content="The model wrote placeholders. Your browser filled the real details back in.">
                       <span className="inline-flex items-center gap-1 text-ok/80">
@@ -684,11 +791,14 @@ export function ChatPage() {
   }, [live, update])
 
   const run = useCallback(
-    async (target: Conversation, history: WireMessage[]) => {
+    async (target: Conversation) => {
       const imageModel = target.imageModel ?? DEFAULT_IMAGE_MODEL
+      const compare = !!target.compare && !target.image
+      const model2 = target.model2 ?? secondModel(target.model)
       const reply = newMessage('assistant', '', {
         model: target.image ? imageModel : target.model,
         ...(target.image ? { image: true } : target.web ? { web: true } : {}),
+        ...(compare ? { alt: { model: model2, content: '' } } : {}),
       })
       const withReply = { ...target, messages: [...target.messages, reply], updatedAt: Date.now() }
       upsert(withReply)
@@ -703,7 +813,32 @@ export function ChatPage() {
       const shielded = !!target.shieldMap && Object.keys(target.shieldMap).length > 0
       const patch = (fields: Partial<ChatMessage>) =>
         update(withReply.id, (c) => ({ ...c, updatedAt: Date.now(), messages: c.messages.map((m) => (m.id === reply.id ? { ...m, ...fields } : m)) }))
-      const hooks = {
+      const patchAlt = (fields: Partial<AltAnswer>) =>
+        update(withReply.id, (c) => ({
+          ...c,
+          updatedAt: Date.now(),
+          messages: c.messages.map((m) => (m.id === reply.id ? { ...m, alt: { ...(m.alt ?? { model: model2, content: '' }), ...fields } } : m)),
+        }))
+      let textB = ''
+      let sourcesB: Source[] = []
+      const hooksB: SendHooks = {
+        signal: ctrl.signal,
+        onPhase: (p: string) => setPhase(p),
+        onDelta: (d: string) => {
+          textB += d
+          patchAlt(shielded ? { wire: textB, content: restore(textB, target.shieldMap ?? {}) } : { content: textB })
+        },
+        web: !!target.web,
+        shield: shielded,
+        onSources: (s: Source[]) => {
+          const next = mergeSources(sourcesB, s)
+          if (next.length === sourcesB.length) return
+          sourcesB = next
+          patchAlt({ sources: sourcesB })
+        },
+        onCost: (usd: number) => patchAlt({ costUsd: usd }),
+      }
+      const hooks: SendHooks = {
         signal: ctrl.signal,
         onPhase: (p: string) => setPhase(p),
         onDelta: (d: string) => {
@@ -718,6 +853,7 @@ export function ChatPage() {
           sources = next
           patch({ sources })
         },
+        onCost: (usd: number) => patch({ costUsd: usd }),
       }
       try {
         if (target.image) {
@@ -740,19 +876,33 @@ export function ChatPage() {
           patch({ images: [{ id, aspect: req.aspect, mime: mimeOf(img.dataUrl) }], costUsd: img.costUsd, ms: performance.now() - t0 })
           return
         }
+        let client: ZkClient | null = null
         if (IS_LIVE && live) {
           // a different chat still holds the key: settle it first so chats never share one
           if (keyOwner.current && keyOwner.current.id !== withReply.id) await endSession()
-          const client = await live.client()
+          client = await live.client()
           if (!keyOwner.current) keyOwner.current = { id: withReply.id, startEth: live.balanceEth }
-          await sendLive(client, withReply.id, target.model, history, hooks)
-        } else {
-          await sendDemo(target.model, history, hooks)
-          const svc = target.model.includes('gpt') ? 'gpt' : target.model.includes('auto') ? 'openrouter' : 'claude'
-          spend(svc, 0.012, randHex(32), `chat · ${modelLabel(target.model)}`)
-          if (target.web) spend('web-search', 0.0021, randHex(32), `web search · ${sources.length} sources`)
         }
-        patch({ ms: performance.now() - t0 })
+        // one side per model; in compare mode both run at once on this chat's key
+        const side = async (model: string, history: WireMessage[], h: SendHooks, done: (f: { ms?: number; error?: string }) => void) => {
+          const ts = performance.now()
+          try {
+            if (client) await sendLive(client, withReply.id, model, history, h)
+            else {
+              await sendDemo(model, history, h)
+              const svc = model.includes('gpt') ? 'gpt' : model.includes('auto') ? 'openrouter' : 'claude'
+              spend(svc, 0.012, randHex(32), `chat · ${modelLabel(model)}`)
+            }
+            done({ ms: performance.now() - ts })
+          } catch (err) {
+            done(ctrl.signal.aborted ? { ms: performance.now() - ts } : { error: errorMessage(err) })
+          }
+        }
+        await Promise.all([
+          side(target.model, toWire(target.messages, 'a'), hooks, patch),
+          compare ? side(model2, toWire(target.messages, 'b'), hooksB, patchAlt) : null,
+        ])
+        if (!client && target.web) spend('web-search', 0.0021, randHex(32), `web search · ${sources.length} sources`)
       } catch (err) {
         if (ctrl.signal.aborted) patch(target.image ? { error: 'Stopped before the image was ready.' } : { ms: performance.now() - t0 })
         else patch({ error: errorMessage(err) })
@@ -783,7 +933,7 @@ export function ChatPage() {
     const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
     setInput('')
     setSkip(new Set())
-    void run(next, toWire(next.messages))
+    void run(next)
   }
 
   const retry = () => {
@@ -791,7 +941,7 @@ export function ChatPage() {
     const last = msgs[msgs.length - 1]
     if (!last || last.role !== 'assistant') return
     const trimmed = { ...conv, messages: msgs.slice(0, -1) }
-    void run(trimmed, toWire(trimmed.messages))
+    void run(trimmed)
   }
 
   const startNew = () => {
@@ -822,7 +972,12 @@ export function ChatPage() {
   }
 
   const toggleImage = () => {
-    setConv({ image: !conv.image, web: false })
+    setConv({ image: !conv.image, web: false, compare: false })
+    textarea.current?.focus()
+  }
+
+  const toggleCompare = () => {
+    setConv({ compare: !conv.compare, image: false, model2: conv.model2 ?? secondModel(conv.model) })
     textarea.current?.focus()
   }
 
@@ -911,6 +1066,31 @@ export function ChatPage() {
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-dim" />
           </label>
+          {conv.compare && !conv.image && (
+            <>
+              <span className="font-mono text-[11px] text-dim">vs</span>
+              <label className="relative">
+                <span className="sr-only">Second model</span>
+                <select
+                  value={conv.model2 ?? secondModel(conv.model)}
+                  onChange={(e) => setConv({ model2: e.target.value })}
+                  disabled={sending}
+                  className="h-9 appearance-none rounded-md border border-eth/30 bg-panel pl-3 pr-8 font-mono text-[11.5px] tracking-[0.04em] text-fg outline-none transition-colors hover:border-eth/50 focus:border-eth/50 disabled:opacity-50"
+                >
+                  {VENDORS.map((v) => (
+                    <optgroup key={v} label={v}>
+                      {MODELS.filter((m) => m.vendor === v).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-dim" />
+              </label>
+            </>
+          )}
           {IS_LIVE && (
             <Tooltip content="Each chat uses its own short-lived key with a $1 cap. Ending the session settles the real usage against your private balance.">
               <span
@@ -950,7 +1130,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -1069,6 +1249,21 @@ export function ChatPage() {
                 >
                   <ShieldCheck className="size-3.5" />
                   <span className="hidden sm:inline">SHIELD</span>
+                </button>
+              </Tooltip>
+              <Tooltip content={conv.compare ? 'Compare is on: two models answer every message, side by side. Each answer is paid separately.' : 'Ask two models at once and compare their answers.'}>
+                <button
+                  type="button"
+                  onClick={toggleCompare}
+                  disabled={sending}
+                  aria-pressed={!!conv.compare}
+                  aria-label="Compare two models"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
+                    conv.compare ? 'border-eth/40 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <Columns2 className="size-3.5" />
+                  <span className="hidden sm:inline">COMPARE</span>
                 </button>
               </Tooltip>
               <textarea
