@@ -5,14 +5,22 @@ import { Spinner } from '../components/ui/Spinner'
 import { StatusDot } from '../components/ui/StatusDot'
 import { shortHex } from '../lib/format'
 import { randHex, randId, randInt } from '../lib/random'
+import { IS_LIVE } from '../config/mode'
 import { DEMO_ADDRESS } from '../lib/wallet'
 
-const TARGETS = [
-  { name: 'CLAUDE API', result: '200 OK · 1.18s' },
-  { name: 'ETH RPC', result: 'eth_call · 41ms' },
-  { name: 'WEB SEARCH', result: '4 results · 0.36s' },
-  { name: 'GPT API', result: '200 OK · 0.94s' },
-]
+const TARGETS = IS_LIVE
+  ? [
+      { name: 'CLAUDE', result: '200 OK · 2.4s' },
+      { name: 'WEB SEARCH', result: '5 sources · 4.1s' },
+      { name: 'GROK', result: '200 OK · 1.8s' },
+      { name: 'IMAGE', result: 'Nano Banana 2 · 9.4s' },
+    ]
+  : [
+      { name: 'CLAUDE API', result: '200 OK · 1.18s' },
+      { name: 'ETH RPC', result: 'eth_call · 41ms' },
+      { name: 'WEB SEARCH', result: '4 results · 0.36s' },
+      { name: 'GPT API', result: '200 OK · 0.94s' },
+    ]
 
 const STEP_MS = 760
 const HOLD_MS = 3400
@@ -57,13 +65,17 @@ export function HeroTerminal() {
   return (
     <div className="relative w-full max-w-[540px] overflow-hidden rounded-lg border border-line-2 bg-panel/85 shadow-[0_30px_80px_-40px_rgb(0_0_0/0.9)] backdrop-blur-sm">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-        <span className="label !text-[10px] text-muted">SESSION TRACE</span>
+        <span className="label !text-[10px] text-muted">{IS_LIVE ? 'HOW A REQUEST WORKS' : 'SESSION TRACE'}</span>
         <span className="flex items-center gap-3 font-mono text-[10.5px] text-dim">
           <span className="hidden tnum sm:inline">{run.req}</span>
-          <span className="inline-flex items-center gap-1.5 tracking-[0.12em] text-ok/90">
-            <StatusDot tone="ok" live />
-            LIVE
-          </span>
+          {IS_LIVE ? (
+            <span className="rounded border border-line-2 px-1.5 py-0.5 tracking-[0.12em] text-dim">ILLUSTRATION</span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 tracking-[0.12em] text-ok/90">
+              <StatusDot tone="ok" live />
+              LIVE
+            </span>
+          )}
         </span>
       </div>
 

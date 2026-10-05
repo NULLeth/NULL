@@ -62,18 +62,27 @@ export function AgentsView() {
   const { createAgent } = useActions()
   const { toast } = useUi()
   const account = useAccount()
+  // live: agents run on the user's machine with the NULL Agent Kit, not in this page
+  if (account.live) {
+    return (
+      <div>
+        <ViewHeader title="MY AGENTS" sub="Real agents run on your machine with the NULL Agent Kit: a key and a daily budget each, paid privately." />
+        <div className="rounded-lg border border-line bg-panel-2 px-5 py-5">
+          <p className="max-w-[560px] text-[13.5px] leading-relaxed text-muted">
+            Your agents and their spend live in the kit&apos;s local dashboard (127.0.0.1:8788), not on this site. NULL never sees them.
+          </p>
+          <a
+            href="/agents"
+            className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-fg px-4 font-mono text-[11px] tracking-[0.12em] text-bg transition-opacity hover:opacity-90"
+          >
+            SET UP THE AGENT KIT →
+          </a>
+        </div>
+      </div>
+    )
+  }
   return (
     <div>
-      {account.live && (
-        <div className="mb-4 rounded-lg border border-eth/20 bg-eth/[0.04] px-4 py-3 text-[13px] leading-relaxed text-muted">
-          <span className="font-mono text-[10.5px] tracking-[0.12em] text-eth">PREVIEW · </span>
-          Agent budgets aren&apos;t live yet; the agents below are simulated. Today an agent can already pay privately on mainnet through{' '}
-          <a href="https://github.com/OpenAnonymity/zkapi/tree/main/zkapi-clientd" target="_blank" rel="noreferrer" className="text-soft underline decoration-line-3 underline-offset-2 hover:text-fg">
-            zkapi-clientd
-          </a>
-          , a local OpenAI-compatible endpoint any agent framework can point at.
-        </div>
-      )}
       <ViewHeader title="MY AGENTS" sub="Each agent spends from its own private budget, with its own key.">
         <Button size="sm" variant="primary" onClick={createAgent} icon={<Plus className="size-3.5" />}>
           Deploy agent

@@ -8,6 +8,7 @@ import { ModalRoot } from './modals/ModalRoot'
 import { About } from './sections/About'
 import { Burn } from './sections/Burn'
 import { Agents } from './sections/Agents'
+import { AgentKitSection } from './sections/AgentKitSection'
 import { Architecture } from './sections/Architecture'
 import { Footer } from './sections/Footer'
 import { Hero } from './sections/Hero'
@@ -55,7 +56,7 @@ export function App() {
                 <Architecture />
                 <Dashboard />
                 <Services />
-                <Agents />
+                {IS_LIVE ? <AgentKitSection /> : <Agents />}
                 <Stats />
                 <Burn />
                 <About />

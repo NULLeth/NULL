@@ -10,7 +10,6 @@ import { fmtEth, fmtUsd } from '../lib/format'
 import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
-import { IS_LIVE } from '../config/mode'
 
 function NewAgentTile({ onClick, tall }: { onClick: () => void; tall: boolean }) {
   return (
@@ -50,25 +49,12 @@ export function Agents() {
               Give machines a budget <span className="text-muted">without giving them your identity.</span>
             </>
           }
-          sub={
-            IS_LIVE
-              ? 'This in-browser demo is simulated. To run real agents with private budgets today, use the NULL Agent Kit: a key and a daily budget per agent, paid privately through zkAPI.'
-              : 'Agents get a scoped private budget and an ephemeral spend key. They pay for models, search and chain data on their own, and nothing they do leads back to your wallet.'
-          }
+          sub="Demo: agents here are simulated in your browser. On the live site, real agents run with the NULL Agent Kit: a key and a daily budget per agent, paid privately through zkAPI."
+
           aside={
-            <div className="flex flex-wrap gap-2">
-              {IS_LIVE && (
-                <a
-                  href="/agents"
-                  className="inline-flex h-10 items-center rounded-md bg-fg px-4 font-mono text-[11.5px] tracking-[0.12em] text-bg transition-opacity hover:opacity-90"
-                >
-                  NULL AGENT KIT →
-                </a>
-              )}
-              <Button variant={IS_LIVE ? 'secondary' : 'primary'} onClick={createAgent} icon={<Plus className="size-4" />}>
-                {IS_LIVE ? 'Try the demo' : 'Create agent'}
-              </Button>
-            </div>
+            <Button variant="primary" onClick={createAgent} icon={<Plus className="size-4" />}>
+              Create agent
+            </Button>
           }
         />
 

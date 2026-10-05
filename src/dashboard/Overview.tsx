@@ -33,7 +33,14 @@ function AccessCard() {
         NONE <Check className="size-3" strokeWidth={2.6} />
       </span>,
     ],
-    account.live ? ['AGENTS', <span className="text-muted">PREVIEW</span>] : ['ACTIVE AGENTS', <span className="text-soft">{activeAgents}</span>],
+    account.live
+      ? [
+          'AGENTS',
+          <a href="/agents" className="text-soft underline decoration-line-3 underline-offset-2 hover:text-fg">
+            AGENT KIT →
+          </a>,
+        ]
+      : ['ACTIVE AGENTS', <span className="text-soft">{activeAgents}</span>],
     [
       account.live ? 'LAST REQUEST' : 'LAST PROOF',
       account.live && lastProof ? (
@@ -66,9 +73,19 @@ function AccessCard() {
         <Button size="sm" variant="secondary" onClick={() => openService('claude')} icon={<MessageSquareText className="size-3.5" />}>
           Playground
         </Button>
-        <Button size="sm" variant="secondary" onClick={createAgent} icon={<Bot className="size-3.5" />}>
-          New agent
-        </Button>
+        {account.live ? (
+          <a
+            href="/agents"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-line-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-soft transition-colors hover:border-line-3 hover:text-fg"
+          >
+            <Bot className="size-3.5" />
+            Agent Kit
+          </a>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={createAgent} icon={<Bot className="size-3.5" />}>
+            New agent
+          </Button>
+        )}
       </div>
     </div>
   )

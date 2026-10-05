@@ -97,7 +97,7 @@ export function Dashboard() {
 
   const counts: Partial<Record<DashTab, string>> = {
     services: String(SERVICES.length),
-    agents: String(state.agents.length),
+    agents: IS_LIVE ? 'KIT' : String(state.agents.length),
   }
 
   return (
