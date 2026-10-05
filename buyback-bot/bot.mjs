@@ -90,6 +90,10 @@ const sender = createPublicClient({ chain: mainnet, transport: http(CFG.sendRpc)
 
 // ── state & log ─────────────────────────────────────────────────────────────
 
+// unwrap a little more than the shortfall (covers the unwrap's own gas), and never bother with dust
+const UNWRAP_MARGIN = parseEther('0.002')
+const MIN_UNWRAP = parseEther('0.0005')
+
 const STATE_FILE = join(HERE, 'state.json')
 const LOG_FILE = join(HERE, 'log.jsonl')
 
@@ -225,20 +229,27 @@ async function run() {
   if (budget <= 0n) return log('nothing to buy back')
 
   if (!CFG.dryRun) {
-    // unwrap as much WETH as the buy needs, keeping some ETH for gas
+    // unwrap enough WETH for the buy plus the gas reserve; the margin also pays for the unwrap itself
     const [ethBal, wethBal] = await Promise.all([
       pub.getBalance({ address: ME }),
       pub.readContract({ address: WETH, abi: ABI, functionName: 'balanceOf', args: [ME] }),
     ])
     const short = budget + CFG.gasReserve - ethBal
     if (short > 0n) {
-      const amount = short < wethBal ? short : wethBal
-      if (amount > 0n) {
+      const want = short + UNWRAP_MARGIN
+      const amount = want < wethBal ? want : wethBal
+      if (amount >= MIN_UNWRAP) {
         await send('unwrap', { address: WETH, abi: ABI, functionName: 'withdraw', args: [amount] }, { amount: amount.toString() })
         if (state.pending) return
       }
       const now = await pub.getBalance({ address: ME })
-      if (now < budget + CFG.gasReserve) return log('not enough ETH for the buy and gas, waiting', { have: eth(now), need: eth(budget + CFG.gasReserve) })
+      if (now < budget + CFG.gasReserve) {
+        // still short: buy what is covered now, the rest stays owed for the next run
+        const can = now - CFG.gasReserve
+        if (can <= 0n) return log('not enough ETH for the buy and gas, waiting', { have: eth(now), need: eth(budget + CFG.gasReserve) })
+        log('buying what is covered now, the rest stays owed', { buy: eth(can), owed: eth(big(state.owed)) })
+        budget = can
+      }
     }
   }
 
