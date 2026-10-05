@@ -1,4 +1,4 @@
-import { chatSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
+import { agentsSound, chatSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
@@ -8,6 +8,7 @@ import { IMAGE_DURATION, drawImageFilm } from './image'
 import { TOR_DURATION, drawTor } from './tor'
 import { SHIELD_DURATION, drawShield } from './shield'
 import { COMPARE_DURATION, drawCompare } from './compare'
+import { AGENTS_DURATION, drawAgents } from './agents'
 
 export interface Film {
   duration: number
@@ -17,6 +18,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  agents: { duration: AGENTS_DURATION, sound: agentsSound, draw: drawAgents },
   compare: { duration: COMPARE_DURATION, sound: compareSound, draw: drawCompare },
   shield: { duration: SHIELD_DURATION, sound: shieldSound, draw: drawShield },
   tor: { duration: TOR_DURATION, sound: torSound, draw: drawTor },

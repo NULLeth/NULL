@@ -11,6 +11,7 @@ import { IMAGE_CUES, IMAGE_DURATION } from './image'
 import { TOR_CUES, TOR_DURATION } from './tor'
 import { SHIELD_CUES, SHIELD_DURATION } from './shield'
 import { COMPARE_CUES, COMPARE_DURATION } from './compare'
+import { AGENTS_CUES, AGENTS_DURATION } from './agents'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -314,6 +315,23 @@ export const compareSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, COMPARE_CUES.streamA[1], 1661.22, 0.11)
   COMPARE_CUES.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, COMPARE_CUES.end + 0.1, 0.7)
+}
+
+/** Agent Kit promo: typing in the terminal, a tick per hop of the request, rows landing on the dashboard. */
+export const agentsSound: Soundtrack = (ctx, out) => {
+  pad(ctx, out, 0, AGENTS_DURATION, [1.0, AGENTS_CUES.end])
+  arrival(ctx, out, 1.0, 0.55)
+  for (const [a, b] of [AGENTS_CUES.cmd1, AGENTS_CUES.cmd2]) {
+    const n = Math.round((b - a) * 22)
+    for (let i = 0; i < n; i++) click(ctx, out, a + ((b - a) * i) / n, 0.08, 12000 + Math.round(a * 100) + i * 37)
+  }
+  tick(ctx, out, AGENTS_CUES.out1, 1318.51, 0.11)
+  tick(ctx, out, AGENTS_CUES.out2, 1479.98, 0.11)
+  sweep(ctx, out, AGENTS_CUES.hops[0], AGENTS_CUES.hops[4] + 0.4, 300, 2400, 0.04)
+  AGENTS_CUES.hops.forEach((at, i) => tick(ctx, out, at + 0.4, [987.77, 1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  arrival(ctx, out, AGENTS_CUES.hops[4] + 1.2, 0.4)
+  for (let i = 0; i < 4; i++) tick(ctx, out, AGENTS_CUES.dash[0] + 0.5 + i * 0.25, 1174.66 + i * 120, 0.07)
+  arrival(ctx, out, AGENTS_CUES.end + 0.1, 0.7)
 }
 
 /** Stats update: the logo, one tick per number, a soft hit for the closing line. */

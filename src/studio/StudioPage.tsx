@@ -15,6 +15,7 @@ import { fetchZkStats, type ZkStats } from './stats'
  */
 
 const CATALOG: { id: string; title: string; note: string; poster: number }[] = [
+  { id: 'agents', title: 'Agent Kit promo', note: '29 s · private money for AI agents', poster: 17.6 },
   { id: 'compare', title: 'Compare + cost promo', note: '26 s · two models side by side, cents per answer', poster: 13.4 },
   { id: 'shield', title: 'Prompt Shield promo', note: '27 s · all 3 layers in your browser', poster: 13.9 },
   { id: 'tor', title: 'Tor mode promo', note: '26 s · hide who pays, hide where you are', poster: 8.8 },
