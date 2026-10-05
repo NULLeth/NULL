@@ -24,16 +24,19 @@ const PATH = (globalThis.location?.pathname ?? '/').replace(/\/+$/, '').toLowerC
 const IS_CHAT = PATH === '/chat'
 const IS_STUDIO = PATH === '/studio'
 const IS_BURN = PATH === '/burn'
+const IS_AGENTS = PATH === '/agents'
 /** Studio is a private tool page; it and the film code load only on /studio. */
 const StudioPage = lazy(() => import('./studio/StudioPage'))
 /** The creator's buyback tool, also unlinked. */
 const BurnPage = lazy(() => import('./burn/BurnPage'))
+/** The NULL Agent Kit page. */
+const AgentsPage = lazy(() => import('./agents/AgentsPage'))
 
 export function App() {
-  if (IS_STUDIO || IS_BURN) {
+  if (IS_STUDIO || IS_BURN || IS_AGENTS) {
     return (
       <Suspense fallback={<div className="min-h-[100dvh] bg-bg" />}>
-        {IS_BURN ? <BurnPage /> : <StudioPage />}
+        {IS_AGENTS ? <AgentsPage /> : IS_BURN ? <BurnPage /> : <StudioPage />}
       </Suspense>
     )
   }

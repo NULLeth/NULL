@@ -5,8 +5,8 @@
   "description": "NULL — private access to the machine economy. One private balance, every API.",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/zkapi-assets.mjs && vite --port 5600 --strictPort",
-    "build": "node scripts/zkapi-assets.mjs && tsc --noEmit && vite build",
+    "dev": "node scripts/zkapi-assets.mjs && node scripts/build-agent.mjs && vite --port 5600 --strictPort",
+    "build": "node scripts/zkapi-assets.mjs && node scripts/build-agent.mjs && tsc --noEmit && vite build",
     "preview": "vite preview --port 5602 --strictPort",
     "typecheck": "tsc --noEmit",
     "zkapi:assets": "node scripts/zkapi-assets.mjs"

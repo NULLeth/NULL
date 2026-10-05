@@ -52,13 +52,23 @@ export function Agents() {
           }
           sub={
             IS_LIVE
-              ? 'Preview: agent budgets are not live yet, so everything in this section is simulated. Agents get a scoped private budget and an ephemeral spend key, and nothing they do leads back to your wallet.'
+              ? 'This in-browser demo is simulated. To run real agents with private budgets today, use the NULL Agent Kit: a key and a daily budget per agent, paid privately through zkAPI.'
               : 'Agents get a scoped private budget and an ephemeral spend key. They pay for models, search and chain data on their own, and nothing they do leads back to your wallet.'
           }
           aside={
-            <Button variant="primary" onClick={createAgent} icon={<Plus className="size-4" />}>
-              Create agent
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {IS_LIVE && (
+                <a
+                  href="/agents"
+                  className="inline-flex h-10 items-center rounded-md bg-fg px-4 font-mono text-[11.5px] tracking-[0.12em] text-bg transition-opacity hover:opacity-90"
+                >
+                  NULL AGENT KIT →
+                </a>
+              )}
+              <Button variant={IS_LIVE ? 'secondary' : 'primary'} onClick={createAgent} icon={<Plus className="size-4" />}>
+                {IS_LIVE ? 'Try the demo' : 'Create agent'}
+              </Button>
+            </div>
           }
         />
 

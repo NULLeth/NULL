@@ -25,6 +25,10 @@
     {
       "source": "/burn",
       "destination": "/index.html"
+    },
+    {
+      "source": "/agents",
+      "destination": "/index.html"
     }
   ]
 }

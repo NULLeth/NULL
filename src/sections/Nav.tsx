@@ -78,6 +78,13 @@ export function Nav() {
               <StatusDot tone="ok" live />
               CHAT
             </a>
+            <a
+              href="/agents"
+              className="relative mr-1 inline-flex items-center gap-1.5 rounded-md border border-eth/30 px-3 py-1.5 font-mono text-[11px] tracking-[0.14em] text-eth transition-colors hover:border-eth/50 hover:bg-eth/[0.06]"
+            >
+              AGENT KIT
+              <span className="rounded bg-eth/15 px-1 text-[9px] tracking-[0.1em]">NEW</span>
+            </a>
             {LINKS.map((l) => (
               <button
                 key={l.id}
@@ -158,6 +165,10 @@ export function Nav() {
                 <span className="inline-flex items-center gap-1.5 text-[10px] text-ok/90">
                   <StatusDot tone="ok" live /> LIVE
                 </span>
+              </a>
+              <a href="/agents" className="flex items-center justify-between border-b border-line py-4 font-mono text-[13px] tracking-[0.16em] text-eth">
+                NULL AGENT KIT
+                <span className="text-[10px] text-eth/80">NEW</span>
               </a>
               {LINKS.map((l, i) => (
                 <motion.button
