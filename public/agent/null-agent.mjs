@@ -40,6 +40,9 @@ const KIND_LABEL = {
   DATE: "date",
   AGE: "age",
   NAME: "name",
+  PLACE: "place",
+  ORG: "organisation",
+  ID: "ID number",
   CUSTOM: "custom"
 };
 const digits = (s) => s.replace(/\D/g, "").length;
@@ -166,7 +169,7 @@ function shield(text, hits, map, skip = /* @__PURE__ */ new Set()) {
   }
   return { text: out + text.slice(last), map: next, used };
 }
-const TAG_RE = /\[?\b(EMAIL|PHONE|WALLET|SECRET|IBAN|CARD|IP|ADDRESS|DATE|AGE|NAME|CUSTOM)_(\d{1,3})\b\]?/gi;
+const TAG_RE = /\[?\b(EMAIL|PHONE|WALLET|SECRET|IBAN|CARD|IP|ADDRESS|DATE|AGE|NAME|PLACE|ORG|ID|CUSTOM)_(\d{1,3})\b\]?/gi;
 function restore(text, map) {
   const back = {};
   for (const [value, tag] of Object.entries(map)) back[tag.toUpperCase()] = value;

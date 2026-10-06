@@ -17,6 +17,7 @@
     "@openanonymity/zkapi-browser-sdk": "github:OpenAnonymity/zkapi#045b444",
     "framer-motion": "^13.5.0",
     "lucide-react": "^1.50.0",
+    "onnxruntime-web": "^1.30.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

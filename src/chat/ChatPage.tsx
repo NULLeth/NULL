@@ -24,6 +24,7 @@ import { useUi } from '../state/ui'
 import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type SendHooks, type WireMessage } from './engine'
 import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
 import { Markdown } from './Markdown'
+import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
 import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatMessage, type Conversation } from './store'
 
@@ -67,15 +68,19 @@ const IMAGE_FROM_URL = new URLSearchParams(window.location.search).get('image') 
 
 /** Prompt Shield settings live in this browser: on by default, plus words to always hide. */
 const SHIELD_KEY = 'null.shield.v1'
-function loadShield(): { on: boolean; words: string[] } {
+/** ai: the in-browser AI Shield model (opt-in, it downloads ~29 MB once) */
+function loadShield(): { on: boolean; words: string[]; ai: boolean } {
   try {
-    const j = JSON.parse(localStorage.getItem(SHIELD_KEY) ?? 'null') as { on?: unknown; words?: unknown } | null
-    if (j && typeof j.on === 'boolean' && Array.isArray(j.words)) return { on: j.on, words: j.words.filter((w): w is string => typeof w === 'string') }
+    const j = JSON.parse(localStorage.getItem(SHIELD_KEY) ?? 'null') as { on?: unknown; words?: unknown; ai?: unknown } | null
+    if (j && typeof j.on === 'boolean' && Array.isArray(j.words))
+      return { on: j.on, words: j.words.filter((w): w is string => typeof w === 'string'), ai: j.ai === true }
   } catch {
     /* fall through */
   }
-  return { on: true, words: [] }
+  return { on: true, words: [], ai: false }
 }
+
+type AiStatus = { status: 'off' | 'loading' | 'ready' | 'error'; progress: number }
 
 /**
  * What goes to the model: the shielded text where there is one. In compare mode each
@@ -296,12 +301,20 @@ function ShieldBar({
   onToggle,
   words,
   onWords,
+  ai,
+  aiWanted,
+  aiKeys,
+  onAi,
 }: {
   hits: ShieldHit[]
   skip: Set<string>
   onToggle: (value: string) => void
   words: string[]
   onWords: (w: string[]) => void
+  ai: AiStatus
+  aiWanted: boolean
+  aiKeys: Set<string>
+  onAi: () => void
 }) {
   const [adding, setAdding] = useState(false)
   const [word, setWord] = useState('')
@@ -331,11 +344,39 @@ function ShieldBar({
                 off ? 'border-line-2 text-dim line-through' : 'border-ok/30 bg-ok/[0.06] text-ok/90 hover:border-ok/50'
               }`}
             >
+              {aiKeys.has(`${h.start}:${h.end}`) && <span className="text-eth">AI · </span>}
               {KIND_LABEL[h.kind]} · {h.value}
             </button>
           )
         })}
-        <button type="button" onClick={() => setAdding((a) => !a)} className="ml-auto text-dim transition-colors hover:text-soft">
+        <Tooltip
+          content={
+            aiWanted
+              ? 'AI Shield: a small model in your browser also finds people, places and companies. Nothing is sent anywhere to do this. Click to turn it off.'
+              : `Turn on AI Shield: a ${AI_MODEL_MB} MB model downloads once from nullzk.com and runs in your browser. It finds people, places and companies the patterns miss. English works best.`
+          }
+        >
+          <button
+            type="button"
+            onClick={onAi}
+            className={`ml-auto h-6 rounded-md border px-2 transition-colors ${
+              aiWanted && ai.status === 'ready'
+                ? 'border-eth/40 bg-eth/10 text-eth'
+                : aiWanted && ai.status === 'error'
+                  ? 'border-bad/30 text-bad/90'
+                  : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+            }`}
+          >
+            {!aiWanted
+              ? `+ AI · ${AI_MODEL_MB} MB`
+              : ai.status === 'ready'
+                ? 'AI ✓'
+                : ai.status === 'error'
+                  ? 'AI unavailable'
+                  : `AI loading ${Math.round(ai.progress * 100)}%`}
+          </button>
+        </Tooltip>
+        <button type="button" onClick={() => setAdding((a) => !a)} className="text-dim transition-colors hover:text-soft">
           {adding ? 'done' : '+ always hide…'}
         </button>
       </div>
@@ -735,7 +776,40 @@ export function ChatPage() {
     }
   }, [shieldCfg])
 
-  const hits = useMemo(() => (shieldCfg.on && input.trim() ? detect(input, shieldCfg.words) : []), [input, shieldCfg])
+  // AI Shield: load the in-browser model when it is switched on, then run it on what is typed
+  const [ai, setAi] = useState<AiStatus>({ status: 'off', progress: 0 })
+  const [aiHits, setAiHits] = useState<{ text: string; hits: ShieldHit[] }>({ text: '', hits: [] })
+  const aiWanted = shieldCfg.on && shieldCfg.ai
+  useEffect(() => {
+    if (!aiWanted) return
+    let alive = true
+    setAi((a) => (a.status === 'ready' ? a : { status: 'loading', progress: 0 }))
+    loadAiShield((p) => alive && setAi({ status: 'loading', progress: p }))
+      .then(() => alive && setAi({ status: 'ready', progress: 1 }))
+      .catch(() => alive && setAi({ status: 'error', progress: 0 }))
+    return () => {
+      alive = false
+    }
+  }, [aiWanted])
+  useEffect(() => {
+    if (!aiWanted || ai.status !== 'ready' || !input.trim()) return
+    const t = setTimeout(() => {
+      void detectAi(input)
+        .then((found) => setAiHits({ text: input, hits: found }))
+        .catch(() => {})
+    }, 250)
+    return () => clearTimeout(t)
+  }, [input, aiWanted, ai.status])
+  const aiCurrent = aiWanted && ai.status === 'ready' && aiHits.text === input
+  const { hits, aiKeys } = useMemo(() => {
+    if (!shieldCfg.on || !input.trim()) return { hits: [], aiKeys: new Set<string>() }
+    const found = detect(input, shieldCfg.words)
+    if (!aiCurrent) return { hits: found, aiKeys: new Set<string>() }
+    // pattern hits win ties, so only what the patterns missed is marked "AI"
+    const merged = mergeHits(found, aiHits.hits)
+    const fromAi = new Set(aiHits.hits)
+    return { hits: merged, aiKeys: new Set(merged.filter((h) => fromAi.has(h)).map((h) => `${h.start}:${h.end}`)) }
+  }, [input, shieldCfg, aiCurrent, aiHits])
 
   // keep the newest text in view while streaming
   useEffect(() => {
@@ -915,14 +989,16 @@ export function ChatPage() {
     [endSession, live, spend, update, upsert],
   )
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     const content = text.trim()
     if (!content || sending || !canSend) return
     // Prompt Shield: swap personal details for placeholders before anything leaves the browser
     let map = conv.shieldMap ?? {}
     let extra: Partial<ChatMessage> = {}
     if (shieldCfg.on) {
-      const s = shield(content, detect(content, shieldCfg.words), map, skip)
+      let found = detect(content, shieldCfg.words)
+      if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(content).catch(() => []))
+      const s = shield(content, found, map, skip)
       if (s.used.length) {
         map = s.map
         extra = { wire: s.text, shielded: s.used.length }
@@ -1198,6 +1274,10 @@ export function ChatPage() {
                 }
                 words={shieldCfg.words}
                 onWords={(words) => setShieldCfg((c) => ({ ...c, words }))}
+                ai={ai}
+                aiWanted={aiWanted}
+                aiKeys={aiKeys}
+                onAi={() => setShieldCfg((c) => ({ ...c, ai: !c.ai }))}
               />
             )}
             <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">
