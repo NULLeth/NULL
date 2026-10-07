@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Paperclip, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Mic, Paperclip, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -25,6 +25,7 @@ import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, 
 import { ACCEPT, fileKind, MAX_FILES, readFile, type DocFile, type ReadFile } from './files'
 import { deleteImages, getImageDataUrl, getText, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
+import { VoiceButton } from './VoiceButton'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
 import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatFile, type ChatMessage, type Conversation } from './store'
@@ -693,6 +694,10 @@ function EmptyState({
           Attach PDFs, text files or photos: opened in your browser, photos lose their GPS location
         </p>
       )}
+      <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
+        <Mic className="size-3" />
+        Talk instead of typing: Whisper turns speech into text in your browser, your voice is never sent
+      </p>
     </div>
   )
 }
@@ -946,6 +951,7 @@ export function ChatPage() {
   attachedRef.current = attached
   const [preparing, setPreparing] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [voiceNote, setVoiceNote] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1287,6 +1293,7 @@ export function ChatPage() {
       const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
       setInput('')
       setSkip(new Set())
+      setVoiceNote(null)
       if (stored.length) {
         setAttached([])
         setDocAi({})
@@ -1548,6 +1555,15 @@ export function ChatPage() {
                 </span>
               </div>
             )}
+            {voiceNote && (
+              <div className={`mb-2 flex items-start gap-1.5 font-mono text-[10.5px] leading-relaxed ${voiceNote.tone === 'ok' ? 'text-ok/85' : 'text-warn/90'}`}>
+                <Mic className="mt-[2px] size-3 shrink-0" />
+                <span className="flex-1">{voiceNote.text}</span>
+                <button type="button" onClick={() => setVoiceNote(null)} aria-label="Dismiss" className="text-dim hover:text-fg">
+                  <X className="size-3" />
+                </button>
+              </div>
+            )}
             {!conv.image && attached.length > 0 && <AttachTray items={attached} onRemove={removeFile} warn={fileWarn} />}
             {shieldCfg.on && (input.trim() || fileHits.length > 0) && (
               <ShieldBar
@@ -1716,6 +1732,14 @@ export function ChatPage() {
                         : 'Fund a private balance to start'
                 }
                 className="max-h-[220px] min-h-[26px] flex-1 resize-none bg-transparent py-1 text-[15px] leading-relaxed text-fg outline-none placeholder:text-dim disabled:opacity-60"
+              />
+              <VoiceButton
+                disabled={!canSend || sending}
+                onNote={setVoiceNote}
+                onText={(t) => {
+                  setInput((cur) => (cur.trim() ? `${cur.trimEnd()} ${t}` : t))
+                  setTimeout(() => textarea.current?.focus(), 30)
+                }}
               />
               {sending ? (
                 <button type="button" onClick={() => abort.current?.abort()} aria-label="Stop" className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line-2 text-soft hover:text-fg">

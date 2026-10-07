@@ -1,3 +1,4 @@
+import { cachedBytes, loadOrt, type Ort } from './ort'
 import type { ShieldHit, ShieldKind } from './shield'
 
 /**
@@ -45,7 +46,6 @@ const MIN_SCORE = 0.55
 const CONTEXT_KINDS = new Set<ShieldKind>(['PLACE', 'ORG'])
 const FIRST_PERSON = /\b(i|i'm|i've|i'd|i'll|me|my|mine|myself|we|we're|us|our|ours|ich|mich|mir|mein\w*|wir|uns|unser\w*)\b/i
 
-type Ort = typeof import('onnxruntime-web/wasm')
 interface Model {
   ort: Ort
   session: import('onnxruntime-web/wasm').InferenceSession
@@ -55,59 +55,12 @@ interface Model {
 
 let model: Promise<Model> | null = null
 
-/** Fetches with the Cache API so the 29 MB model downloads once, reporting progress 0..1. */
-async function cachedBytes(url: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-  let cache: Cache | null = null
-  try {
-    cache = await caches.open(CACHE)
-    const hit = await cache.match(url)
-    if (hit) {
-      onProgress?.(1)
-      return hit.arrayBuffer()
-    }
-  } catch {
-    /* no Cache API (private mode): plain fetch */
-  }
-  const res = await fetch(url)
-  if (!res.ok || !res.body) throw new Error(`Could not load ${url} (${res.status})`)
-  const total = Number(res.headers.get('content-length')) || 0
-  const reader = res.body.getReader()
-  const parts: Uint8Array[] = []
-  let got = 0
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    parts.push(value)
-    got += value.length
-    if (total) onProgress?.(Math.min(0.99, got / total))
-  }
-  const bytes = new Uint8Array(got)
-  let at = 0
-  for (const p of parts) {
-    bytes.set(p, at)
-    at += p.length
-  }
-  try {
-    await cache?.put(url, new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } }))
-  } catch {
-    /* cache full: fine, it just downloads again next time */
-  }
-  onProgress?.(1)
-  return bytes.buffer
-}
-
 /** Loads the runtime and the model once; later calls reuse it. */
 export function loadAiShield(onProgress?: (p: number) => void): Promise<Model> {
   model ??= (async () => {
-    const [ort, { default: mjs }, { default: wasm }] = await Promise.all([
-      import('onnxruntime-web/wasm') as Promise<Ort>,
-      import('onnxruntime-web/ort-wasm-simd-threaded.mjs?url'),
-      import('onnxruntime-web/ort-wasm-simd-threaded.wasm?url'),
-    ])
-    ort.env.wasm.wasmPaths = { mjs, wasm }
-    ort.env.wasm.numThreads = 1
+    const ort = await loadOrt()
     const [bytes, vocabText, config] = await Promise.all([
-      cachedBytes(MODEL_URL, onProgress),
+      cachedBytes(CACHE, MODEL_URL, onProgress),
       fetch(VOCAB_URL).then((r) => r.text()),
       fetch(CONFIG_URL).then((r) => r.json() as Promise<{ id2label: Record<string, string> }>),
     ])
