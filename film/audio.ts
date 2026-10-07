@@ -14,6 +14,7 @@ import { COMPARE_CUES, COMPARE_DURATION } from './compare'
 import { AGENTS_CUES, AGENTS_DURATION } from './agents'
 import { AISHIELD_CUES, AISHIELD_DURATION } from './aishield'
 import { FILES_CUES, FILES_DURATION } from './files'
+import { VOICE_CUES, VOICE_DURATION } from './voice'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -372,6 +373,25 @@ export const filesSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, K.send, 1318.51, 0.12)
   K.morph.forEach((at, i) => tick(ctx, out, at, [1479.98, 1661.22][i], 0.1))
   K.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Private Voice promo: the cloud whoosh, the mic click, a soft rising sweep while recording, Whisper's steps, the hops. */
+export const voiceSound: Soundtrack = (ctx, out) => {
+  const K = VOICE_CUES
+  pad(ctx, out, 0, VOICE_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.cloud[0] + 0.6, K.cloud[1] - 0.4, 200, 1600, 0.03)
+  tick(ctx, out, K.click, 1174.66, 0.13)
+  sweep(ctx, out, K.click + 0.3, K.speakEnd, 300, 900, 0.025)
+  tick(ctx, out, K.stop, 1318.51, 0.12)
+  sweep(ctx, out, K.whisper[0], K.whisper[1], 500, 2600, 0.04)
+  for (let i = 0; i < 3; i++) tick(ctx, out, K.whisper[0] + 0.6 + i * 0.25, [1318.51, 1479.98, 1661.22][i], 0.08)
+  const n = 20
+  for (let i = 0; i < n; i++) click(ctx, out, K.typed[0] + ((K.typed[1] - K.typed[0]) * i) / n, 0.06, 15000 + i * 47)
+  tick(ctx, out, K.shield, 1760, 0.1)
+  hit(ctx, out, K.leaves[1], 0.28, 130, 55, 0.4)
+  K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
