@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, Globe, ImageIcon, Menu, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Paperclip, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -22,11 +22,12 @@ import { useActions } from '../state/actions'
 import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
 import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type SendHooks, type WireMessage } from './engine'
-import { deleteImages, getImageDataUrl, putImage, useImageUrl } from './images'
+import { ACCEPT, fileKind, MAX_FILES, readFile, type DocFile, type ReadFile } from './files'
+import { deleteImages, getImageDataUrl, getText, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
-import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatMessage, type Conversation } from './store'
+import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatFile, type ChatMessage, type Conversation } from './store'
 
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
@@ -83,19 +84,61 @@ function loadShield(): { on: boolean; words: string[]; ai: boolean } {
 type AiStatus = { status: 'off' | 'loading' | 'ready' | 'error'; progress: number }
 
 /**
- * What goes to the model: the shielded text where there is one. In compare mode each
+ * What goes to the model: the shielded text where there is one, attached documents as text
+ * blocks (shielded too), photos as images for models that can see. In compare mode each
  * model gets its own thread: side 'b' sees the second model's earlier answers.
  */
-const toWire = (msgs: ChatMessage[], side: 'a' | 'b' = 'a'): WireMessage[] =>
-  msgs.flatMap((m) => {
+async function toWire(msgs: ChatMessage[], side: 'a' | 'b', vision: boolean): Promise<WireMessage[]> {
+  const out: WireMessage[] = []
+  for (const m of msgs) {
     const src: ChatMessage | AltAnswer = side === 'b' && m.role === 'assistant' && m.alt ? m.alt : m
     const text = src.wire ?? src.content
-    return src.error || !text ? [] : [{ role: m.role, content: text }]
-  })
+    if (src.error || (!text && !m.files?.length)) continue
+    if (m.role !== 'user' || !m.files?.length) {
+      out.push({ role: m.role, content: text })
+      continue
+    }
+    const docs = await Promise.all(
+      m.files
+        .filter((f) => f.kind === 'doc')
+        .map(async (f) => (await getText(`${f.id}.wire`)) ?? (await getText(f.id)) ?? `<document name="${docName(f.name)}">\n(no longer stored in this browser)\n</document>`),
+    )
+    const body = [...docs, text].filter(Boolean).join('\n\n')
+    const photos = m.files.filter((f) => f.kind === 'photo')
+    if (!photos.length) out.push({ role: 'user', content: body })
+    else if (!vision) out.push({ role: 'user', content: `${body}\n\n(${photos.length} photo${photos.length === 1 ? '' : 's'} left out: this model reads text only)`.trim() })
+    else {
+      const urls = (await Promise.all(photos.map((f) => getImageDataUrl(f.id)))).filter((u): u is string => !!u)
+      out.push({ role: 'user', content: [{ type: 'text', text: body || 'Here is a photo.' }, ...urls.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] })
+    }
+  }
+  return out
+}
+
+const canSee = (model: string) => !LIVE.textOnlyModels.includes(model)
+/** file names go to the model inside the document tag, so they are shielded too ("Jonas_Weber_CV" → words) */
+const docName = (name: string) => name.replace(/[_]+/g, ' ').replace(/"/g, "'")
+const docBlock = (f: DocFile) => `<document name="${docName(f.name)}"${f.pages ? ` pages="${f.pages}"` : ''}>\n${f.text}\n</document>`
+/** rough token count of a text (about 4 characters per token) */
+const fmtTokens = (chars: number) => {
+  const t = Math.max(1, Math.round(chars / 4))
+  return t < 1000 ? `~${t} tokens` : `~${(t / 1000).toFixed(t < 10_000 ? 1 : 0)}k tokens`
+}
+const fmtChars = (n: number) => (n < 1000 ? `${n} chars` : `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k chars`)
+
+/** A file being attached to the next message. */
+interface Attachment {
+  key: string
+  name: string
+  kind: 'doc' | 'photo'
+  status: 'reading' | 'ready' | 'error'
+  file?: ReadFile
+  error?: string
+}
 
 const mimeOf = (dataUrl: string) => dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png'
 const extOf = (mime: string) => (mime.includes('jpeg') ? 'jpg' : mime.split('/')[1] || 'png')
-const imageIds = (c: Conversation) => c.messages.flatMap((m) => m.images?.map((i) => i.id) ?? [])
+const imageIds = (c: Conversation) => c.messages.flatMap((m) => [...(m.images?.map((i) => i.id) ?? []), ...(m.files?.map((f) => f.id) ?? [])])
 /** the image a new prompt in this chat would edit: the answer right before it */
 const editTarget = (messages: ChatMessage[]) => {
   const prev = messages[messages.length - 1]
@@ -305,7 +348,9 @@ function ShieldBar({
   aiWanted,
   aiKeys,
   onAi,
+  files,
 }: {
+  files: { name: string; count: number }[]
   hits: ShieldHit[]
   skip: Set<string>
   onToggle: (value: string) => void
@@ -318,7 +363,9 @@ function ShieldBar({
 }) {
   const [adding, setAdding] = useState(false)
   const [word, setWord] = useState('')
-  const hidden = hits.filter((h) => !skip.has(h.value)).length
+  const inFiles = files.reduce((n, f) => n + f.count, 0)
+  const hidden = hits.filter((h) => !skip.has(h.value)).length + inFiles
+  const total = hits.length + inFiles
   const add = () => {
     const w = word.trim()
     if (w.length >= 2 && !words.includes(w)) onWords([...words, w])
@@ -331,7 +378,18 @@ function ShieldBar({
           <ShieldCheck className="size-3.5" />
           SHIELD
         </span>
-        <span className="text-dim">{hits.length ? `${hidden} of ${hits.length} hidden from the AI` : 'nothing personal found'}</span>
+        <span className="text-dim">{total ? `${hidden} of ${total} hidden from the AI` : 'nothing personal found'}</span>
+        {files.map((f, i) => (
+          <span
+            key={`${f.name}-${i}`}
+            title="Details in this file are swapped for placeholders before it is sent."
+            className={`inline-flex h-6 max-w-[240px] items-center gap-1 rounded-md border px-2 ${f.count ? 'border-ok/30 bg-ok/[0.06] text-ok/90' : 'border-line-2 text-dim'}`}
+          >
+            <FileText className="size-3 shrink-0" />
+            <span className="truncate">{f.name}</span>
+            <span className="shrink-0 whitespace-nowrap">· {f.count ? `${f.count} hidden` : 'nothing found'}</span>
+          </span>
+        ))}
         {hits.map((h) => {
           const off = skip.has(h.value)
           return (
@@ -411,20 +469,147 @@ function ShieldBar({
   )
 }
 
+function BubblePhoto({ f }: { f: ChatFile }) {
+  const url = useImageUrl(f.id)
+  return url ? (
+    <img src={url} alt={f.name} title={f.name} className="max-h-44 max-w-[260px] rounded-xl border border-line-2 object-cover" />
+  ) : (
+    <div className="flex h-24 w-32 items-center justify-center rounded-xl border border-line-2 font-mono text-[10px] text-dim">{url === null ? 'photo not stored' : '…'}</div>
+  )
+}
+
+function BubbleDoc({ f }: { f: ChatFile }) {
+  return (
+    <div className="flex max-w-[280px] items-center gap-2.5 rounded-xl border border-line-2 bg-white/[0.03] px-3 py-2">
+      <FileText className="size-4 shrink-0 text-dim" />
+      <div className="min-w-0">
+        <div className="truncate text-[13px] text-fg">{f.name}</div>
+        <div className="truncate font-mono text-[10px] text-dim">
+          {f.pages ? `${f.pages} page${f.pages === 1 ? '' : 's'} · ` : ''}
+          {fmtChars(f.chars ?? 0)}
+          {f.truncated ? ' · first part' : ''}
+          {f.shielded ? <span className="text-ok/80"> · {f.shielded} hidden</span> : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** The shielded text of an attached document, as the model received it (loaded on demand). */
+function DocWire({ f }: { f: ChatFile }) {
+  const [text, setText] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const t = (await getText(`${f.id}.wire`)) ?? (await getText(f.id))
+      if (alive) setText(t)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [f.id])
+  return (
+    <div className="max-h-64 w-full overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-line px-3 py-2 font-mono text-[11.5px] leading-relaxed text-muted">
+      {text === undefined ? '…' : text === null ? 'This file is no longer stored in this browser.' : text}
+    </div>
+  )
+}
+
 function UserBubble({ m }: { m: ChatMessage }) {
   const [show, setShow] = useState(false)
+  const photos = m.files?.filter((f) => f.kind === 'photo') ?? []
+  const docs = m.files?.filter((f) => f.kind === 'doc') ?? []
+  const cleaned = [...new Set(photos.flatMap((p) => p.removed ?? []).map((r) => r.replace(/\s*\(.*$/, '')))]
   return (
     <div className="flex flex-col items-end">
-      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md border border-line-2 bg-white/[0.045] px-4 py-2.5 text-[15px] leading-relaxed text-fg">{m.content}</div>
-      {!!m.shielded && (
-        <div className="mt-1.5 flex max-w-[85%] flex-col items-end gap-1.5">
-          <button type="button" onClick={() => setShow((s) => !s)} className="inline-flex items-center gap-1 font-mono text-[10.5px] text-ok/80 hover:text-ok">
-            <ShieldCheck className="size-3" />
-            {m.shielded} hidden from the AI · {show ? 'hide' : 'show what it saw'}
-          </button>
-          {show && <div className="whitespace-pre-wrap rounded-lg border border-line px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">{m.wire}</div>}
+      {!!m.files?.length && (
+        <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          {photos.map((f) => (
+            <BubblePhoto key={f.id} f={f} />
+          ))}
+          {docs.map((f) => (
+            <BubbleDoc key={f.id} f={f} />
+          ))}
         </div>
       )}
+      {m.content && (
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md border border-line-2 bg-white/[0.045] px-4 py-2.5 text-[15px] leading-relaxed text-fg">{m.content}</div>
+      )}
+      {!!photos.length && (
+        <div className="mt-1.5 inline-flex max-w-[85%] items-center gap-1 text-right font-mono text-[10.5px] text-ok/80">
+          <ShieldCheck className="size-3 shrink-0" />
+          {cleaned.length ? `cleaned in your browser · ${cleaned.join(', ')} removed` : 'cleaned in your browser · no hidden data found'}
+        </div>
+      )}
+      {(!!m.shielded || !!docs.length) && (
+        <div className="mt-1.5 flex w-full max-w-[85%] flex-col items-end gap-1.5">
+          <button type="button" onClick={() => setShow((s) => !s)} className="inline-flex items-center gap-1 font-mono text-[10.5px] text-ok/80 hover:text-ok">
+            <ShieldCheck className="size-3" />
+            {m.shielded ? `${m.shielded} hidden from the AI · ` : ''}
+            {show ? 'hide' : 'show what it saw'}
+          </button>
+          {show && (
+            <>
+              {docs.map((f) => (
+                <DocWire key={f.id} f={f} />
+              ))}
+              {m.content && <div className="whitespace-pre-wrap rounded-lg border border-line px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">{m.wire ?? m.content}</div>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Files waiting to go with the next message. */
+function AttachTray({ items, onRemove, warn }: { items: Attachment[]; onRemove: (key: string) => void; warn?: string }) {
+  return (
+    <div className="mb-2">
+      <div className="flex flex-wrap gap-2">
+        {items.map((a) => {
+          const photo = a.file?.kind === 'photo' ? a.file : null
+          const doc = a.file?.kind === 'doc' ? a.file : null
+          const removed = a.file?.removed ?? []
+          const note =
+            a.status === 'reading'
+              ? 'opening in your browser…'
+              : a.status === 'error'
+                ? a.error
+                : photo
+                  ? removed.length
+                    ? `${removed[0]} removed${removed.length > 1 ? ` +${removed.length - 1}` : ''}`
+                    : 'no hidden data found'
+                  : doc
+                    ? `${doc.pages ? `${doc.pages} page${doc.pages === 1 ? '' : 's'} · ` : ''}${fmtChars(doc.text.length)} · ${fmtTokens(doc.text.length)}${doc.truncated ? ' · first part' : ''}`
+                    : ''
+          const tip = removed.length ? `Stays in your browser: ${removed.join(', ')}` : undefined
+          return (
+            <div
+              key={a.key}
+              className={`flex h-14 max-w-[300px] items-center gap-2.5 rounded-lg border bg-panel py-2 pl-2 pr-1 ${a.status === 'error' ? 'border-bad/30' : 'border-line-2'}`}
+            >
+              {photo ? (
+                <img src={photo.dataUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+              ) : (
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-line-2 text-dim">
+                  {a.status === 'reading' ? <Spinner /> : a.kind === 'photo' ? <ImageIcon className="size-4" /> : <FileText className="size-4" />}
+                </div>
+              )}
+              <div className="min-w-0 flex-1" title={tip}>
+                <div className="truncate text-[12.5px] text-fg">{a.name}</div>
+                <div className={`truncate font-mono text-[10px] ${a.status === 'error' ? 'text-bad/90' : photo && removed.length ? 'text-ok/90' : 'text-dim'}`}>{note}</div>
+              </div>
+              <button type="button" onClick={() => onRemove(a.key)} aria-label={`Remove ${a.name}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:text-fg">
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      <p className={`mt-1.5 font-mono text-[10.5px] ${warn ? 'text-warn/90' : 'text-dim'}`}>
+        {warn ?? 'Opened in your browser: documents go as text, photos as clean copies without location or camera data.'}
+      </p>
     </div>
   )
 }
@@ -500,6 +685,12 @@ function EmptyState({
         <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-ok/80">
           <ShieldCheck className="size-3" />
           Prompt Shield is on: names, emails, numbers and addresses are swapped for placeholders before sending
+        </p>
+      )}
+      {!image && (
+        <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
+          <Paperclip className="size-3" />
+          Attach PDFs, text files or photos: opened in your browser, photos lose their GPS location
         </p>
       )}
     </div>
@@ -750,6 +941,12 @@ export function ChatPage() {
   const [input, setInput] = useState('')
   const [shieldCfg, setShieldCfg] = useState(loadShield)
   const [skip, setSkip] = useState<Set<string>>(() => new Set())
+  const [attached, setAttached] = useState<Attachment[]>([])
+  const attachedRef = useRef(attached)
+  attachedRef.current = attached
+  const [preparing, setPreparing] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
@@ -810,6 +1007,55 @@ export function ChatPage() {
     const fromAi = new Set(aiHits.hits)
     return { hits: merged, aiKeys: new Set(merged.filter((h) => fromAi.has(h)).map((h) => `${h.start}:${h.end}`)) }
   }, [input, shieldCfg, aiCurrent, aiHits])
+
+  // attached documents: what the shield will hide in each (the AI pass runs once per file)
+  const [docAi, setDocAi] = useState<Record<string, ShieldHit[]>>({})
+  useEffect(() => {
+    if (!aiWanted || ai.status !== 'ready') return
+    for (const a of attached) {
+      if (a.file?.kind !== 'doc' || docAi[a.key]) continue
+      const key = a.key
+      void detectAi(docBlock(a.file))
+        .then((found) => setDocAi((d) => ({ ...d, [key]: found })))
+        .catch(() => setDocAi((d) => ({ ...d, [key]: [] })))
+    }
+  }, [attached, aiWanted, ai.status, docAi])
+  const fileHits = useMemo(
+    () =>
+      shieldCfg.on
+        ? attached.flatMap((a) => {
+            if (a.file?.kind !== 'doc') return []
+            let found = detect(docBlock(a.file), shieldCfg.words)
+            if (aiWanted && ai.status === 'ready' && docAi[a.key]) found = mergeHits(found, docAi[a.key])
+            return [{ name: a.name, count: found.filter((h) => !skip.has(h.value)).length }]
+          })
+        : [],
+    [attached, shieldCfg, aiWanted, ai.status, docAi, skip],
+  )
+
+  const addFiles = (list: FileList | File[]) => {
+    const incoming = [...list]
+    if (!incoming.length) return
+    const room = Math.max(0, MAX_FILES - attachedRef.current.length)
+    const take = incoming.slice(0, room)
+    const items: Attachment[] = take.map((f) => ({ key: randId('file', 8), name: f.name || 'pasted image', kind: fileKind(f) ?? 'doc', status: 'reading' }))
+    if (incoming.length > take.length)
+      items.push({ key: randId('file', 8), name: `${incoming.length - take.length} more file${incoming.length - take.length === 1 ? '' : 's'}`, kind: 'doc', status: 'error', error: `Up to ${MAX_FILES} files per message.` })
+    setAttached((cur) => [...cur, ...items])
+    take.forEach((f, i) => {
+      const key = items[i].key
+      void readFile(f).then(
+        (file) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, status: 'ready', file } : a))),
+        (err) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, status: 'error', error: errorMessage(err) } : a))),
+      )
+    })
+  }
+  const removeFile = (key: string) => setAttached((c) => c.filter((a) => a.key !== key))
+  const readyFiles = attached.filter((a) => a.status === 'ready' && a.file)
+  const stillReading = attached.some((a) => a.status === 'reading')
+  const compareModel = conv.compare && !conv.image ? (conv.model2 ?? secondModel(conv.model)) : null
+  const blind = attached.some((a) => a.file?.kind === 'photo') ? [conv.model, compareModel].filter((m): m is string => !!m && !canSee(m)) : []
+  const fileWarn = blind.length ? `${blind.map(modelLabel).join(' and ')} read${blind.length === 1 ? 's' : ''} text only: pick a model that can see to send photos.` : undefined
 
   // keep the newest text in view while streaming
   useEffect(() => {
@@ -972,10 +1218,11 @@ export function ChatPage() {
             done(ctrl.signal.aborted ? { ms: performance.now() - ts } : { error: errorMessage(err) })
           }
         }
-        await Promise.all([
-          side(target.model, toWire(target.messages, 'a'), hooks, patch),
-          compare ? side(model2, toWire(target.messages, 'b'), hooksB, patchAlt) : null,
+        const [historyA, historyB] = await Promise.all([
+          toWire(target.messages, 'a', canSee(target.model)),
+          compare ? toWire(target.messages, 'b', canSee(model2)) : null,
         ])
+        await Promise.all([side(target.model, historyA, hooks, patch), compare && historyB ? side(model2, historyB, hooksB, patchAlt) : null])
         if (!client && target.web) spend('web-search', 0.0021, randHex(32), `web search · ${sources.length} sources`)
       } catch (err) {
         if (ctrl.signal.aborted) patch(target.image ? { error: 'Stopped before the image was ready.' } : { ms: performance.now() - t0 })
@@ -991,25 +1238,65 @@ export function ChatPage() {
 
   const send = async (text: string) => {
     const content = text.trim()
-    if (!content || sending || !canSend) return
-    // Prompt Shield: swap personal details for placeholders before anything leaves the browser
-    let map = conv.shieldMap ?? {}
-    let extra: Partial<ChatMessage> = {}
-    if (shieldCfg.on) {
-      let found = detect(content, shieldCfg.words)
-      if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(content).catch(() => []))
-      const s = shield(content, found, map, skip)
-      if (s.used.length) {
-        map = s.map
-        extra = { wire: s.text, shielded: s.used.length }
+    const files = conv.image ? [] : readyFiles
+    if ((!content && !files.length) || sending || preparing || !canSend || stillReading || blind.length) return
+    setPreparing(true)
+    try {
+      // Prompt Shield: swap personal details for placeholders before anything leaves the browser
+      let map = conv.shieldMap ?? {}
+      let extra: Partial<ChatMessage> = {}
+      let hidden = 0
+      const shieldText = async (s: string) => {
+        let found = detect(s, shieldCfg.words)
+        if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(s).catch(() => []))
+        const r = shield(s, found, map, skip)
+        map = r.map
+        hidden += r.used.length
+        return r
       }
+      if (shieldCfg.on && content) {
+        const s = await shieldText(content)
+        if (s.used.length) extra = { wire: s.text }
+      }
+      // files: stored in this browser; documents also as the shielded text the model will see
+      const stored: ChatFile[] = []
+      for (const a of files) {
+        const f = a.file!
+        if (f.kind === 'photo') {
+          const id = randId('pic', 12)
+          await putImage(id, f.dataUrl)
+          stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed })
+          continue
+        }
+        const id = randId('doc', 12)
+        const block = docBlock(f)
+        await putText(id, block)
+        let shielded = 0
+        if (shieldCfg.on) {
+          const s = await shieldText(block)
+          if (s.used.length) {
+            await putText(`${id}.wire`, s.text)
+            shielded = s.used.length
+          }
+        }
+        stored.push({ id, kind: 'doc', name: f.name, pages: f.pages, chars: f.text.length, truncated: f.truncated, removed: f.removed, shielded })
+      }
+      if (hidden) extra = { ...extra, shielded: hidden }
+      const user = newMessage('user', content, { ...extra, ...(stored.length ? { files: stored } : {}) })
+      const base = conv.messages.length ? conv : { ...conv, title: titleFrom(content || stored[0]?.name || '') }
+      const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
+      setInput('')
+      setSkip(new Set())
+      if (stored.length) {
+        setAttached([])
+        setDocAi({})
+      }
+      void run(next)
+    } catch (err) {
+      setAttached((c) => [...c, { key: randId('file', 8), name: 'Could not attach', kind: 'doc', status: 'error', error: errorMessage(err) }])
+    } finally {
+      setPreparing(false)
     }
-    const user = newMessage('user', content, extra)
-    const base = conv.messages.length ? conv : { ...conv, title: titleFrom(content) }
-    const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
-    setInput('')
-    setSkip(new Set())
-    void run(next)
   }
 
   const retry = () => {
@@ -1048,6 +1335,7 @@ export function ChatPage() {
   }
 
   const toggleImage = () => {
+    if (!conv.image) setAttached([])
     setConv({ image: !conv.image, web: false, compare: false })
     textarea.current?.focus()
   }
@@ -1260,8 +1548,10 @@ export function ChatPage() {
                 </span>
               </div>
             )}
-            {shieldCfg.on && input.trim() && (
+            {!conv.image && attached.length > 0 && <AttachTray items={attached} onRemove={removeFile} warn={fileWarn} />}
+            {shieldCfg.on && (input.trim() || fileHits.length > 0) && (
               <ShieldBar
+                files={fileHits}
                 hits={hits}
                 skip={skip}
                 onToggle={(v) =>
@@ -1280,7 +1570,52 @@ export function ChatPage() {
                 onAi={() => setShieldCfg((c) => ({ ...c, ai: !c.ai }))}
               />
             )}
-            <div className="flex items-end gap-2 rounded-xl border border-line-2 bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3">
+            <div
+              onDragOver={(e) => {
+                if (conv.image || !e.dataTransfer.types.includes('Files')) return
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                setDragging(false)
+                if (conv.image || !e.dataTransfer.files.length) return
+                e.preventDefault()
+                addFiles(e.dataTransfer.files)
+              }}
+              className={`flex items-end gap-2 rounded-xl border bg-panel px-3 py-2.5 transition-colors focus-within:border-line-3 ${dragging ? 'border-ok/50 bg-ok/[0.04]' : 'border-line-2'}`}
+            >
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                accept={ACCEPT}
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) addFiles(e.target.files)
+                  e.target.value = ''
+                }}
+              />
+              <Tooltip
+                content={
+                  conv.image
+                    ? 'Files can’t be attached in image mode.'
+                    : 'Attach PDFs, text files or photos. They are opened in your browser: documents go as text through Prompt Shield, photos as clean copies without GPS location, camera or date.'
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  disabled={sending || conv.image || attached.length >= MAX_FILES}
+                  aria-label="Attach files"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
+                    attached.length ? 'border-ok/35 bg-ok/[0.08] text-ok/90' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <Paperclip className="size-3.5" />
+                  {attached.length > 0 && <span>{attached.length}</span>}
+                </button>
+              </Tooltip>
               <Tooltip content={conv.web ? 'Web search is on: answers use live results and list sources. Adds a small search fee per message.' : 'Turn on web search for live results with sources.'}>
                 <button
                   type="button"
@@ -1350,6 +1685,11 @@ export function ChatPage() {
                 ref={textarea}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={(e) => {
+                  if (conv.image || !e.clipboardData.files.length) return
+                  e.preventDefault()
+                  addFiles(e.clipboardData.files)
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault()
@@ -1366,7 +1706,9 @@ export function ChatPage() {
                         : 'Describe an image…'
                       : conv.web
                         ? 'Search the web privately…'
-                        : 'Ask privately…'
+                        : readyFiles.length
+                          ? 'Ask about your files…'
+                          : 'Ask privately…'
                     : IS_LIVE && account.status === 'loading'
                       ? 'Connecting to zkAPI…'
                       : IS_LIVE && account.status === 'error'
@@ -1383,7 +1725,7 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={() => send(input)}
-                  disabled={!input.trim() || !canSend}
+                  disabled={(!input.trim() && (conv.image || !readyFiles.length)) || !canSend || preparing || stillReading || blind.length > 0}
                   aria-label="Send"
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-fg text-bg transition-opacity disabled:opacity-25"
                 >

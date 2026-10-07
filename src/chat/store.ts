@@ -6,6 +6,24 @@ import type { ShieldMap } from './shield'
 /** Conversations live only in this browser. Nothing is stored on a server. Demo chats are kept apart. */
 const KEY = IS_LIVE ? 'null.chat.v1' : 'null.chat.demo.v1'
 
+/**
+ * A file attached to a user message. The content lives in IndexedDB under `id` (photo: the
+ * cleaned image; document: its text, plus `${id}.wire` with the shielded text the model saw).
+ */
+export interface ChatFile {
+  id: string
+  kind: 'doc' | 'photo'
+  name: string
+  mime?: string
+  pages?: number
+  chars?: number
+  truncated?: boolean
+  /** what stayed behind: photo metadata, document details */
+  removed?: string[]
+  /** details the shield replaced in this document */
+  shielded?: number
+}
+
 /** The second model's answer to the same message, in compare mode. */
 export interface AltAnswer {
   model: string
@@ -39,6 +57,8 @@ export interface ChatMessage {
   shielded?: number
   /** compare mode: the second model's answer, shown next to this one */
   alt?: AltAnswer
+  /** documents and photos attached to this user message */
+  files?: ChatFile[]
 }
 
 export interface Conversation {

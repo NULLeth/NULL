@@ -67,6 +67,8 @@ export const LIVE = {
     { id: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick', vendor: 'Meta' },
     { id: 'openrouter/auto', label: 'Auto · OpenRouter', vendor: 'Auto' },
   ],
+  /** chat models that only read text: photos are left out for them (checked on OpenRouter 2026-10-07) */
+  textOnlyModels: ['deepseek/deepseek-v4-pro-0813', 'z-ai/glm-5.3'] as string[],
   /**
    * Image models (OpenRouter image API), each with zero-data-retention endpoints.
    * `approxUsd` is a typical 1K image; the exact charge comes back with each image.

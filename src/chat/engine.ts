@@ -6,10 +6,17 @@ import { cannedSearch } from '../protocol/responses'
 import { providerError, readStream, type Source } from '../live/stream'
 import { SHIELD_SYSTEM } from './shield'
 
+export type WirePart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+
 export interface WireMessage {
   role: 'user' | 'assistant' | 'system'
-  content: string
+  /** text, or text plus photos for models that can see */
+  content: string | WirePart[]
 }
+
+/** The text of a message, without its photos. */
+export const textOf = (content: WireMessage['content']) =>
+  typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join('\n')
 
 interface KeyHooks {
   /** short status line while the request is being authorized / running */
@@ -175,7 +182,9 @@ export async function sendImageLive(client: ZkClient, sessionId: string, model: 
 
 /** Demo mode: the canned router, streamed so it feels like the real thing. */
 export async function sendDemo(model: string, history: WireMessage[], hooks: SendHooks): Promise<void> {
-  const last = [...history].reverse().find((m) => m.role === 'user')?.content ?? ''
+  const lastMsg = [...history].reverse().find((m) => m.role === 'user')
+  const last = lastMsg ? textOf(lastMsg.content) : ''
+  const photos = Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === 'image_url').length : 0
   hooks.onPhase('Generating proof…')
   await sleep(650)
   hooks.onPhase('Request authorized…')
@@ -185,7 +194,7 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   hooks.onPhase('')
   if (hooks.web) hooks.onSources?.(cannedSearch(last).filter((h) => !h.url.startsWith('nullzk.com')).map((h) => ({ url: `https://${h.url}`, title: h.title })))
   const tags = [...new Set(last.match(/\[[A-Z]+_\d+\]/g) ?? [])]
-  const text = hooks.shield && tags.length ? shieldDemo(tags) : cannedChat(last, model)
+  const text = last.includes('<document ') || photos ? filesDemo(last, photos, tags.length) : hooks.shield && tags.length ? shieldDemo(tags) : cannedChat(last, model)
   for (let i = 0; i < text.length; ) {
     if (hooks.signal?.aborted) return
     const n = 3 + Math.floor(Math.random() * 5)
@@ -198,9 +207,20 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
 
 /** Demo only: a plausible per-answer cost from rough token counts and the model's price tier. */
 function demoCost(model: string, history: WireMessage[], answer: string): number {
-  const tokens = (history.reduce((n, m) => n + m.content.length, 0) + answer.length) / 4
+  const tokens = (history.reduce((n, m) => n + textOf(m.content).length, 0) + answer.length) / 4
   const tier = /opus/.test(model) ? 2.5 : /haiku|luna|flash|deepseek|glm|llama|mistral/.test(model) ? 0.2 : 1
   return tokens * 0.000006 * tier
+}
+
+/** Demo answer for attached files: says plainly what a real model would have received. */
+function filesDemo(last: string, photos: number, tags: number): string {
+  const docs = [...last.matchAll(/<document name="([^"]*)"[^>]*>\n?([\s\S]*?)\n?<\/document>/g)]
+  const lines = ['**Demo answer.** In live mode the model you picked reads your files and answers here. This is what it would receive:', '']
+  for (const d of docs) lines.push(`- **${d[1]}**: ${d[2].length.toLocaleString('en-US')} characters of text, read in your browser`)
+  if (photos) lines.push(`- **${photos} photo${photos === 1 ? '' : 's'}**, redrawn in your browser, so location, camera and date are gone`)
+  if (tags) lines.push(`- **${tags} placeholder${tags === 1 ? '' : 's'}** such as [NAME_1] in place of personal details`)
+  lines.push('', 'The files themselves never leave this browser. Only the text and the cleaned photos would be sent, and only for this answer.')
+  return lines.join('\n')
 }
 
 /** Demo answer for a shielded prompt: written with the placeholders only, like a real model would. */

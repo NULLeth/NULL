@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Generated images live in this browser's IndexedDB (localStorage is far too small
- * for them). Chat messages only keep the image id. Nothing is uploaded anywhere.
+ * Generated images and attached files (cleaned photos, document text) live in this
+ * browser's IndexedDB (localStorage is far too small for them). Chat messages only keep
+ * the id. Nothing is uploaded anywhere.
  */
 
 const DB = 'null.chat.images'
@@ -38,6 +39,16 @@ export async function putImage(id: string, dataUrl: string): Promise<void> {
   await tx('readwrite', (s) => s.put(blob, id))
 }
 
+/** A document's text (`${id}`) or the shielded text the model saw (`${id}.wire`). */
+export async function putText(id: string, text: string): Promise<void> {
+  await tx('readwrite', (s) => s.put(new Blob([text], { type: 'text/plain' }), id))
+}
+
+export async function getText(id: string): Promise<string | null> {
+  const blob = await getImageBlob(id)
+  return blob ? blob.text() : null
+}
+
 export async function getImageBlob(id: string): Promise<Blob | null> {
   try {
     return ((await tx<Blob>('readonly', (s) => s.get(id))) as Blob | undefined) ?? null
@@ -62,7 +73,11 @@ export async function deleteImages(ids: string[]): Promise<void> {
   if (!ids.length) return
   try {
     await tx('readwrite', (s) => {
-      ids.forEach((id) => s.delete(id))
+      // a document also has its shielded copy
+      ids.forEach((id) => {
+        s.delete(id)
+        s.delete(`${id}.wire`)
+      })
     })
   } catch {
     /* nothing to clean up */
