@@ -13,6 +13,7 @@ import { SHIELD_CUES, SHIELD_DURATION } from './shield'
 import { COMPARE_CUES, COMPARE_DURATION } from './compare'
 import { AGENTS_CUES, AGENTS_DURATION } from './agents'
 import { AISHIELD_CUES, AISHIELD_DURATION } from './aishield'
+import { FILES_CUES, FILES_DURATION } from './files'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -351,6 +352,26 @@ export const aiShieldSound: Soundtrack = (ctx, out) => {
   sweep(ctx, out, K.panel[0], K.panel[1], 400, 2200, 0.035)
   K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98][i], 0.1))
   K.stats.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Private Files promo: the drop, a tick per file ready and per detail removed or swapped, typing, the answer. */
+export const filesSound: Soundtrack = (ctx, out) => {
+  const K = FILES_CUES
+  pad(ctx, out, 0, FILES_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.drag[0], K.drag[1], 300, 1400, 0.03)
+  hit(ctx, out, K.drag[1], 0.25, 140, 60, 0.3)
+  K.ready.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51][i], 0.1))
+  K.rows.forEach((at) => tick(ctx, out, at, 987.77, 0.07))
+  sweep(ctx, out, K.redraw[0], K.redraw[1], 400, 2400, 0.04)
+  K.removed.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  K.swaps.forEach((at, i) => tick(ctx, out, at, 1174.66 + i * 90, 0.08))
+  const n = 22
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 14000 + i * 43)
+  tick(ctx, out, K.send, 1318.51, 0.12)
+  K.morph.forEach((at, i) => tick(ctx, out, at, [1479.98, 1661.22][i], 0.1))
+  K.points.forEach((at) => hit(ctx, out, at, 0.3, 130, 55, 0.4))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
