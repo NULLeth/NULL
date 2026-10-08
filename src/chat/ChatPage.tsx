@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Mic, Paperclip, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Mic, Paperclip, Plus, ScanFace, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -135,6 +135,8 @@ interface Attachment {
   status: 'reading' | 'ready' | 'error'
   file?: ReadFile
   error?: string
+  /** Face Shield: send this photo with its faces blurred (default) */
+  blur?: boolean
 }
 
 const mimeOf = (dataUrl: string) => dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png'
@@ -521,6 +523,7 @@ function UserBubble({ m }: { m: ChatMessage }) {
   const photos = m.files?.filter((f) => f.kind === 'photo') ?? []
   const docs = m.files?.filter((f) => f.kind === 'doc') ?? []
   const cleaned = [...new Set(photos.flatMap((p) => p.removed ?? []).map((r) => r.replace(/\s*\(.*$/, '')))]
+  const faces = photos.reduce((n, p) => n + (p.faces ?? 0), 0)
   return (
     <div className="flex flex-col items-end">
       {!!m.files?.length && (
@@ -539,7 +542,9 @@ function UserBubble({ m }: { m: ChatMessage }) {
       {!!photos.length && (
         <div className="mt-1.5 inline-flex max-w-[85%] items-center gap-1 text-right font-mono text-[10.5px] text-ok/80">
           <ShieldCheck className="size-3 shrink-0" />
-          {cleaned.length ? `cleaned in your browser · ${cleaned.join(', ')} removed` : 'cleaned in your browser · no hidden data found'}
+          cleaned in your browser
+          {faces ? ` · ${faces} face${faces === 1 ? '' : 's'} blurred` : ''}
+          {cleaned.length ? ` · ${cleaned.join(', ')} removed` : faces ? '' : ' · no hidden data found'}
         </div>
       )}
       {(!!m.shielded || !!docs.length) && (
@@ -564,7 +569,7 @@ function UserBubble({ m }: { m: ChatMessage }) {
 }
 
 /** Files waiting to go with the next message. */
-function AttachTray({ items, onRemove, warn }: { items: Attachment[]; onRemove: (key: string) => void; warn?: string }) {
+function AttachTray({ items, onRemove, onBlur, warn }: { items: Attachment[]; onRemove: (key: string) => void; onBlur: (key: string) => void; warn?: string }) {
   return (
     <div className="mb-2">
       <div className="flex flex-wrap gap-2">
@@ -572,26 +577,28 @@ function AttachTray({ items, onRemove, warn }: { items: Attachment[]; onRemove: 
           const photo = a.file?.kind === 'photo' ? a.file : null
           const doc = a.file?.kind === 'doc' ? a.file : null
           const removed = a.file?.removed ?? []
+          const blurred = !!photo?.faces && a.blur !== false
+          const facePart = photo?.faces ? `${photo.faces} face${photo.faces === 1 ? '' : 's'} ${blurred ? 'blurred' : 'shown'}` : ''
+          const dataPart = removed.length ? `${removed[0].replace(/\s*\(.*$/, '')} removed${removed.length > 1 ? ` +${removed.length - 1}` : ''}` : ''
           const note =
             a.status === 'reading'
               ? 'opening in your browser…'
               : a.status === 'error'
                 ? a.error
                 : photo
-                  ? removed.length
-                    ? `${removed[0]} removed${removed.length > 1 ? ` +${removed.length - 1}` : ''}`
-                    : 'no hidden data found'
+                  ? [facePart, dataPart].filter(Boolean).join(' · ') || (photo.faceCheckFailed ? 'no hidden data found · face check unavailable' : 'no hidden data or faces found')
                   : doc
                     ? `${doc.pages ? `${doc.pages} page${doc.pages === 1 ? '' : 's'} · ` : ''}${fmtChars(doc.text.length)} · ${fmtTokens(doc.text.length)}${doc.truncated ? ' · first part' : ''}`
                     : ''
           const tip = removed.length ? `Stays in your browser: ${removed.join(', ')}` : undefined
+          const noteTone = a.status === 'error' ? 'text-bad/90' : photo?.faces && !blurred ? 'text-warn/90' : photo && (removed.length || blurred) ? 'text-ok/90' : 'text-dim'
           return (
             <div
               key={a.key}
               className={`flex h-14 max-w-[300px] items-center gap-2.5 rounded-lg border bg-panel py-2 pl-2 pr-1 ${a.status === 'error' ? 'border-bad/30' : 'border-line-2'}`}
             >
               {photo ? (
-                <img src={photo.dataUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+                <img src={blurred && photo.blurredUrl ? photo.blurredUrl : photo.dataUrl} alt="" className="size-10 shrink-0 rounded-md object-cover" />
               ) : (
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-line-2 text-dim">
                   {a.status === 'reading' ? <Spinner /> : a.kind === 'photo' ? <ImageIcon className="size-4" /> : <FileText className="size-4" />}
@@ -599,8 +606,20 @@ function AttachTray({ items, onRemove, warn }: { items: Attachment[]; onRemove: 
               )}
               <div className="min-w-0 flex-1" title={tip}>
                 <div className="truncate text-[12.5px] text-fg">{a.name}</div>
-                <div className={`truncate font-mono text-[10px] ${a.status === 'error' ? 'text-bad/90' : photo && removed.length ? 'text-ok/90' : 'text-dim'}`}>{note}</div>
+                <div className={`truncate font-mono text-[10px] ${noteTone}`}>{note}</div>
               </div>
+              {!!photo?.faces && (
+                <button
+                  type="button"
+                  onClick={() => onBlur(a.key)}
+                  aria-pressed={blurred}
+                  aria-label={blurred ? 'Send faces as they are' : 'Blur faces'}
+                  title={blurred ? 'Faces are blurred before sending. Click to send them as they are.' : 'Faces will be sent as they are. Click to blur them.'}
+                  className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md ${blurred ? 'text-ok/90 hover:text-ok' : 'text-warn/90 hover:text-warn'}`}
+                >
+                  <ScanFace className="size-3.5" />
+                </button>
+              )}
               <button type="button" onClick={() => onRemove(a.key)} aria-label={`Remove ${a.name}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-dim hover:text-fg">
                 <X className="size-3.5" />
               </button>
@@ -609,7 +628,7 @@ function AttachTray({ items, onRemove, warn }: { items: Attachment[]; onRemove: 
         })}
       </div>
       <p className={`mt-1.5 font-mono text-[10.5px] ${warn ? 'text-warn/90' : 'text-dim'}`}>
-        {warn ?? 'Opened in your browser: documents go as text, photos as clean copies without location or camera data.'}
+        {warn ?? 'Opened in your browser: documents go as text, photos as clean copies without location or camera data, faces blurred.'}
       </p>
     </div>
   )
@@ -691,7 +710,7 @@ function EmptyState({
       {!image && (
         <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
           <Paperclip className="size-3" />
-          Attach PDFs, text files or photos: opened in your browser, photos lose their GPS location
+          Attach PDFs, text files or photos: opened in your browser, photos lose their GPS location and faces are blurred
         </p>
       )}
       <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
@@ -1270,8 +1289,9 @@ export function ChatPage() {
         const f = a.file!
         if (f.kind === 'photo') {
           const id = randId('pic', 12)
-          await putImage(id, f.dataUrl)
-          stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed })
+          const blurred = a.blur !== false && !!f.blurredUrl
+          await putImage(id, blurred ? f.blurredUrl! : f.dataUrl)
+          stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed, faces: blurred ? f.faces : 0 })
           continue
         }
         const id = randId('doc', 12)
@@ -1564,7 +1584,12 @@ export function ChatPage() {
                 </button>
               </div>
             )}
-            {!conv.image && attached.length > 0 && <AttachTray items={attached} onRemove={removeFile} warn={fileWarn} />}
+            {!conv.image && attached.length > 0 && <AttachTray
+                items={attached}
+                onRemove={removeFile}
+                onBlur={(key) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, blur: a.blur === false } : a)))}
+                warn={fileWarn}
+              />}
             {shieldCfg.on && (input.trim() || fileHits.length > 0) && (
               <ShieldBar
                 files={fileHits}
@@ -1616,7 +1641,7 @@ export function ChatPage() {
                 content={
                   conv.image
                     ? 'Files can’t be attached in image mode.'
-                    : 'Attach PDFs, text files or photos. They are opened in your browser: documents go as text through Prompt Shield, photos as clean copies without GPS location, camera or date.'
+                    : 'Attach PDFs, text files or photos. They are opened in your browser: documents go as text through Prompt Shield, photos as clean copies without GPS location, camera or date, with faces blurred.'
                 }
               >
                 <button

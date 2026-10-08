@@ -3,8 +3,11 @@
  * anywhere. A document becomes plain text (PDFs with pdf.js), so only its text reaches the
  * model, and that text goes through Prompt Shield like a message. A photo is redrawn on a
  * canvas, which keeps the pixels and drops everything else: GPS location, camera, date taken.
- * The model still sees what is in the picture.
+ * Faces in it are found and blurred too (Face Shield, faces.ts). The model still sees the rest
+ * of the picture.
  */
+
+import { blurFaces, findFaces } from './faces'
 
 export interface DocFile {
   kind: 'doc'
@@ -26,6 +29,11 @@ export interface PhotoFile {
   height: number
   /** hidden data found in the original and dropped by redrawing it */
   removed: string[]
+  /** faces found by Face Shield; `blurredUrl` is the copy with them blurred */
+  faces: number
+  blurredUrl?: string
+  /** the face check could not run (the photo is still cleaned) */
+  faceCheckFailed?: boolean
 }
 
 export type ReadFile = DocFile | PhotoFile
@@ -132,7 +140,17 @@ async function readPhoto(file: File): Promise<PhotoFile> {
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
   const mime = png ? 'image/png' : 'image/jpeg'
-  return { kind: 'photo', name: file.name, dataUrl: canvas.toDataURL(mime, 0.88), mime, width, height, removed }
+  let faces = 0
+  let blurredUrl: string | undefined
+  let faceCheckFailed = false
+  try {
+    const found = await findFaces(canvas)
+    faces = found.length
+    if (faces) blurredUrl = blurFaces(canvas, found).toDataURL(mime, 0.88)
+  } catch {
+    faceCheckFailed = true
+  }
+  return { kind: 'photo', name: file.name, dataUrl: canvas.toDataURL(mime, 0.88), mime, width, height, removed, faces, blurredUrl, faceCheckFailed }
 }
 
 /** What a photo carries besides its pixels, in plain words (JPEG EXIF in detail, other formats roughly). */

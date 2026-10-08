@@ -22,6 +22,8 @@ export interface ChatFile {
   removed?: string[]
   /** details the shield replaced in this document */
   shielded?: number
+  /** faces blurred in this photo before it was sent */
+  faces?: number
 }
 
 /** The second model's answer to the same message, in compare mode. */
