@@ -15,6 +15,7 @@ import { AGENTS_CUES, AGENTS_DURATION } from './agents'
 import { AISHIELD_CUES, AISHIELD_DURATION } from './aishield'
 import { FILES_CUES, FILES_DURATION } from './files'
 import { VOICE_CUES, VOICE_DURATION } from './voice'
+import { FACES_CUES, FACES_DURATION } from './faces'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -391,6 +392,25 @@ export const voiceSound: Soundtrack = (ctx, out) => {
   for (let i = 0; i < n; i++) click(ctx, out, K.typed[0] + ((K.typed[1] - K.typed[0]) * i) / n, 0.06, 15000 + i * 47)
   tick(ctx, out, K.shield, 1760, 0.1)
   hit(ctx, out, K.leaves[1], 0.28, 130, 55, 0.4)
+  K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Face Shield promo: the drop, the detector sweep, a tick per face, the blur, the toggle, the answer. */
+export const facesSound: Soundtrack = (ctx, out) => {
+  const K = FACES_CUES
+  pad(ctx, out, 0, FACES_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.drag[0], K.drag[1], 300, 1400, 0.03)
+  hit(ctx, out, K.drag[1], 0.25, 140, 60, 0.3)
+  sweep(ctx, out, K.scan[0], K.scan[1], 600, 2400, 0.04)
+  K.boxes.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.1))
+  sweep(ctx, out, K.blur[0], K.blur[1] + 0.4, 2400, 300, 0.035)
+  tick(ctx, out, K.off, 880, 0.1)
+  tick(ctx, out, K.on, 1318.51, 0.1)
+  const n = 22
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 16000 + i * 53)
+  tick(ctx, out, K.send, 1318.51, 0.12)
   K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
