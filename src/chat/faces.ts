@@ -28,7 +28,8 @@ let model: Promise<{ ort: Ort; session: import('onnxruntime-web/wasm').Inference
 function load() {
   model ??= (async () => {
     const [ort, bytes] = await Promise.all([loadOrt(), cachedBytes(CACHE, MODEL_URL)])
-    const session = await ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] })
+    // the 2019 export lists its weights as graph inputs: harmless, but ort warns once per weight
+    const session = await ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'], logSeverityLevel: 3 })
     return { ort, session }
   })().catch((e) => {
     model = null
