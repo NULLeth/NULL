@@ -2,6 +2,8 @@ node_modules
 dist
 *.local
 public/zkapi/
+# tesseract.js runtime + model, copied by scripts/ocr-assets.mjs
+public/ocr/
 brand/film/shots/
 brand/film/*.mp4
 brand/film/NULL-Film.html

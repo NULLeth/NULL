@@ -3,11 +3,14 @@
  * anywhere. A document becomes plain text (PDFs with pdf.js), so only its text reaches the
  * model, and that text goes through Prompt Shield like a message. A photo is redrawn on a
  * canvas, which keeps the pixels and drops everything else: GPS location, camera, date taken.
- * Faces in it are found and blurred too (Face Shield, faces.ts). The model still sees the rest
- * of the picture.
+ * Faces in it are blurred (Face Shield, faces.ts) and personal details written in it, like an
+ * email or a wallet address on a screenshot, are covered (Screenshot Shield, ocr.ts). The model
+ * still sees the rest of the picture.
  */
 
 import { blurFaces, findFaces } from './faces'
+import { coverText, findTextDetails, type Covered } from './ocr'
+import type { ShieldHit } from './shield'
 
 export interface DocFile {
   kind: 'doc'
@@ -29,11 +32,30 @@ export interface PhotoFile {
   height: number
   /** hidden data found in the original and dropped by redrawing it */
   removed: string[]
-  /** faces found by Face Shield; `blurredUrl` is the copy with them blurred */
+  /** faces found by Face Shield */
   faces: number
-  blurredUrl?: string
-  /** the face check could not run (the photo is still cleaned) */
+  /** personal details found in the picture's text by Screenshot Shield */
+  covered: Covered[]
+  /** cleaned copies with faces blurred, details covered, or both */
+  variants: { faces?: string; text?: string; both?: string }
+  /** a check could not run (the photo is still cleaned of metadata) */
   faceCheckFailed?: boolean
+  textCheckFailed?: boolean
+}
+
+/** What a photo goes out as, given the two switches on its card. */
+export function photoUrl(f: PhotoFile, blur: boolean, cover: boolean): string {
+  const v = f.variants
+  if (blur && cover && v.both) return v.both
+  if (blur && v.faces) return v.faces
+  if (cover && v.text) return v.text
+  return f.dataUrl
+}
+
+/** Prompt Shield settings for reading the text in a picture. */
+export interface ReadOptions {
+  words?: string[]
+  ai?: (text: string) => Promise<ShieldHit[]>
 }
 
 export type ReadFile = DocFile | PhotoFile
@@ -54,8 +76,8 @@ const isText = (f: File) => f.type.startsWith('text/') || TEXT_EXT.test(f.name) 
 export const fileKind = (f: File): 'doc' | 'photo' | null => (isPhoto(f) ? 'photo' : isPdf(f) || isText(f) ? 'doc' : null)
 
 /** Opens one file in the browser: text out of a document, a clean copy of a photo. */
-export async function readFile(file: File): Promise<ReadFile> {
-  if (isPhoto(file)) return readPhoto(file)
+export async function readFile(file: File, opts: ReadOptions = {}): Promise<ReadFile> {
+  if (isPhoto(file)) return readPhoto(file, opts)
   if (isPdf(file)) return readPdf(file)
   if (isText(file)) {
     const raw = (await file.text()).replace(/\r\n?/g, '\n')
@@ -115,7 +137,7 @@ async function readPdf(file: File): Promise<DocFile> {
 
 // ── photos ───────────────────────────────────────────────────────────────────
 
-async function readPhoto(file: File): Promise<PhotoFile> {
+async function readPhoto(file: File, opts: ReadOptions): Promise<PhotoFile> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const removed = hiddenData(bytes)
   let bitmap: ImageBitmap
@@ -140,17 +162,28 @@ async function readPhoto(file: File): Promise<PhotoFile> {
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
   const mime = png ? 'image/png' : 'image/jpeg'
-  let faces = 0
-  let blurredUrl: string | undefined
-  let faceCheckFailed = false
-  try {
-    const found = await findFaces(canvas)
-    faces = found.length
-    if (faces) blurredUrl = blurFaces(canvas, found).toDataURL(mime, 0.88)
-  } catch {
-    faceCheckFailed = true
+  const [faceBoxes, text] = await Promise.all([findFaces(canvas).catch(() => null), findTextDetails(canvas, opts).catch(() => null)])
+  const variants: PhotoFile['variants'] = {}
+  const blurred = faceBoxes?.length ? blurFaces(canvas, faceBoxes) : null
+  if (blurred) variants.faces = blurred.toDataURL(mime, 0.88)
+  if (text?.boxes.length) {
+    variants.text = coverText(canvas, text.boxes).toDataURL(mime, 0.88)
+    if (blurred) variants.both = coverText(blurred, text.boxes).toDataURL(mime, 0.88)
   }
-  return { kind: 'photo', name: file.name, dataUrl: canvas.toDataURL(mime, 0.88), mime, width, height, removed, faces, blurredUrl, faceCheckFailed }
+  return {
+    kind: 'photo',
+    name: file.name,
+    dataUrl: canvas.toDataURL(mime, 0.88),
+    mime,
+    width,
+    height,
+    removed,
+    faces: faceBoxes?.length ?? 0,
+    covered: text?.covered ?? [],
+    variants,
+    faceCheckFailed: !faceBoxes,
+    textCheckFailed: !text,
+  }
 }
 
 /** What a photo carries besides its pixels, in plain words (JPEG EXIF in detail, other formats roughly). */

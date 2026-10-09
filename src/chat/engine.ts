@@ -217,7 +217,7 @@ function filesDemo(last: string, photos: number, tags: number): string {
   const docs = [...last.matchAll(/<document name="([^"]*)"[^>]*>\n?([\s\S]*?)\n?<\/document>/g)]
   const lines = ['**Demo answer.** In live mode the model you picked reads your files and answers here. This is what it would receive:', '']
   for (const d of docs) lines.push(`- **${d[1]}**: ${d[2].length.toLocaleString('en-US')} characters of text, read in your browser`)
-  if (photos) lines.push(`- **${photos} photo${photos === 1 ? '' : 's'}**, redrawn in your browser, so location, camera and date are gone and any faces are blurred`)
+  if (photos) lines.push(`- **${photos} photo${photos === 1 ? '' : 's'}**, redrawn in your browser, so location, camera and date are gone, faces are blurred and personal details in it are covered`)
   if (tags) lines.push(`- **${tags} placeholder${tags === 1 ? '' : 's'}** such as [NAME_1] in place of personal details`)
   lines.push('', 'The files themselves never leave this browser. Only the text and the cleaned photos would be sent, and only for this answer.')
   return lines.join('\n')

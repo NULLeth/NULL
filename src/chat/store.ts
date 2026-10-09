@@ -24,6 +24,8 @@ export interface ChatFile {
   shielded?: number
   /** faces blurred in this photo before it was sent */
   faces?: number
+  /** personal details covered in this photo's text before it was sent */
+  covered?: number
 }
 
 /** The second model's answer to the same message, in compare mode. */
