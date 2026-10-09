@@ -17,6 +17,7 @@ import { FILES_CUES, FILES_DURATION } from './files'
 import { VOICE_CUES, VOICE_DURATION } from './voice'
 import { FACES_CUES, FACES_DURATION } from './faces'
 import { SCREENSHOT_CUES, SCREENSHOT_DURATION } from './screenshot'
+import { BACKUP_CUES, BACKUP_DURATION } from './backup'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -430,6 +431,27 @@ export const screenshotSound: Soundtrack = (ctx, out) => {
   for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 17000 + i * 59)
   tick(ctx, out, K.send, 1318.51, 0.12)
   K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Encrypted Backup promo: clicks through the dialog, a slow sweep while Argon2id works, the seal, the restore. */
+export const backupSound: Soundtrack = (ctx, out) => {
+  const K = BACKUP_CUES
+  pad(ctx, out, 0, BACKUP_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, K.problem[0] + 1.6, 880, 0.08)
+  tick(ctx, out, K.open, 1174.66, 0.12)
+  for (let i = 0; i < 12; i++) click(ctx, out, K.generate + i * 0.03, 0.06, 18000 + i * 61)
+  tick(ctx, out, K.tick, 1318.51, 0.1)
+  tick(ctx, out, K.download, 1479.98, 0.12)
+  sweep(ctx, out, K.kdf[0], K.kdf[1], 200, 900, 0.04)
+  sweep(ctx, out, K.encrypt[0], K.encrypt[1], 900, 2600, 0.04)
+  hit(ctx, out, K.saved, 0.3, 130, 55, 0.4)
+  tick(ctx, out, K.pick, 1174.66, 0.1)
+  const n = 20
+  for (let i = 0; i < n; i++) click(ctx, out, K.pass[0] + ((K.pass[1] - K.pass[0]) * i) / n, 0.07, 19000 + i * 67)
+  hit(ctx, out, K.restored, 0.3, 130, 55, 0.4)
+  K.points.forEach((at) => hit(ctx, out, at, 0.28, 130, 55, 0.4))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
