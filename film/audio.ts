@@ -16,6 +16,7 @@ import { AISHIELD_CUES, AISHIELD_DURATION } from './aishield'
 import { FILES_CUES, FILES_DURATION } from './files'
 import { VOICE_CUES, VOICE_DURATION } from './voice'
 import { FACES_CUES, FACES_DURATION } from './faces'
+import { SCREENSHOT_CUES, SCREENSHOT_DURATION } from './screenshot'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -410,6 +411,23 @@ export const facesSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, K.on, 1318.51, 0.1)
   const n = 22
   for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 16000 + i * 53)
+  tick(ctx, out, K.send, 1318.51, 0.12)
+  K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Screenshot Shield promo: the drop, the OCR sweep, a tick per detail found, a thud per box, the answer. */
+export const screenshotSound: Soundtrack = (ctx, out) => {
+  const K = SCREENSHOT_CUES
+  pad(ctx, out, 0, SCREENSHOT_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.drag[0], K.drag[1], 300, 1400, 0.03)
+  hit(ctx, out, K.drag[1], 0.25, 140, 60, 0.3)
+  sweep(ctx, out, K.ocr[0], K.ocr[1], 500, 2600, 0.04)
+  K.found.forEach((at, i) => tick(ctx, out, at, [987.77, 1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  K.cover.forEach((at) => hit(ctx, out, at + 0.05, 0.18, 160, 70, 0.18))
+  const n = 26
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 17000 + i * 59)
   tick(ctx, out, K.send, 1318.51, 0.12)
   K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
   arrival(ctx, out, K.end + 0.1, 0.7)
