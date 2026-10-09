@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -23,7 +23,9 @@ import { useNull } from '../state/store'
 import { useUi } from '../state/ui'
 import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, type SendHooks, type WireMessage } from './engine'
 import { ACCEPT, fileKind, MAX_FILES, photoUrl, readFile, type DocFile, type ReadFile } from './files'
-import { deleteImages, getImageDataUrl, getText, putImage, putText, useImageUrl } from './images'
+import type { BackupContents } from './backup'
+import { BackupDialog, type RestoreResult } from './BackupDialog'
+import { deleteImages, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { VoiceButton } from './VoiceButton'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
@@ -220,6 +222,7 @@ function Sidebar({
   onNew,
   onDelete,
   onClear,
+  onBackup,
 }: {
   list: Conversation[]
   activeId: string
@@ -227,6 +230,7 @@ function Sidebar({
   onNew: () => void
   onDelete: (id: string) => void
   onClear: () => void
+  onBackup: (tab: 'export' | 'import') => void
 }) {
   const now = useNow(30_000)
   return (
@@ -244,7 +248,14 @@ function Sidebar({
         </Button>
       </div>
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {list.length === 0 && <p className="px-3 py-6 text-center text-[12.5px] leading-relaxed text-dim">Your chats stay in this browser. Nothing is saved on a server.</p>}
+        {list.length === 0 && (
+          <div className="px-3 py-6 text-center">
+            <p className="text-[12.5px] leading-relaxed text-dim">Your chats stay in this browser. Nothing is saved on a server.</p>
+            <button type="button" onClick={() => onBackup('import')} className="mt-3 font-mono text-[10.5px] tracking-[0.1em] text-soft underline decoration-line-3 underline-offset-4 hover:text-fg">
+              restore an encrypted backup
+            </button>
+          </div>
+        )}
         {list.map((c) => (
           <div
             key={c.id}
@@ -273,6 +284,19 @@ function Sidebar({
           </button>
         )}
       </div>
+      {list.length > 0 && (
+        <div className="px-3 pb-2">
+          <button
+            type="button"
+            onClick={() => onBackup('export')}
+            className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left font-mono text-[10.5px] tracking-[0.12em] text-dim transition-colors hover:border-line-3 hover:text-soft"
+          >
+            <LockKeyhole className="size-3.5" />
+            ENCRYPTED BACKUP
+            <span className="ml-auto tracking-normal text-faint">back up · restore</span>
+          </button>
+        </div>
+      )}
       <BalanceMini />
     </div>
   )
@@ -991,7 +1015,7 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export function ChatPage() {
-  const { list, upsert, update, remove, clear } = useConversations()
+  const { list, upsert, update, merge, remove, clear } = useConversations()
   const live = useLive()
   const account = useAccount()
   const { spend } = useNull()
@@ -1013,6 +1037,7 @@ export function ChatPage() {
   const [preparing, setPreparing] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [voiceNote, setVoiceNote] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
+  const [backup, setBackup] = useState<'export' | 'import' | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1426,6 +1451,29 @@ export function ChatPage() {
 
   const keyOpen = IS_LIVE ? !!live?.pendingRequest || !!keyOwner.current : false
 
+  /** Puts a decrypted backup into this browser: new chats are added, existing ones keep the newer copy. */
+  const restoreBackup = async (c: BackupContents): Promise<RestoreResult> => {
+    const have = new Map(list.map((x) => [x.id, x]))
+    let added = 0
+    let newer = 0
+    let kept = 0
+    for (const conv of c.conversations) {
+      const h = have.get(conv.id)
+      if (!h) added++
+      else if (h.updatedAt < conv.updatedAt) newer++
+      else kept++
+    }
+    let files = 0
+    for (const [id, blob] of c.files) {
+      if (await getImageBlob(id)) continue
+      await putBlob(id, blob)
+      if (!id.endsWith('.wire')) files++
+    }
+    merge(c.conversations)
+    if (c.shieldWords.length) setShieldCfg((s) => ({ ...s, words: [...new Set([...s.words, ...c.shieldWords])] }))
+    return { added, newer, kept, files }
+  }
+
   const sidebar = (
     <Sidebar
       list={list.filter((c) => c.messages.length)}
@@ -1442,6 +1490,11 @@ export function ChatPage() {
         void deleteImages(list.flatMap(imageIds))
         clear()
         setActiveId('')
+      }}
+      onBackup={(tab) => {
+        if (sending) return
+        setDrawer(false)
+        setBackup(tab)
       }}
     />
   )
@@ -1837,6 +1890,14 @@ export function ChatPage() {
           </div>
         </div>
       </main>
+      <BackupDialog
+        open={backup !== null}
+        initialTab={backup ?? 'export'}
+        onClose={() => setBackup(null)}
+        conversations={list.filter((c) => c.messages.length)}
+        shieldWords={shieldCfg.words}
+        onRestore={restoreBackup}
+      />
     </div>
   )
 }

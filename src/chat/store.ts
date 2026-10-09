@@ -130,10 +130,22 @@ export function useConversations() {
     setList((l) => l.map((c) => (c.id === id ? fn(c) : c)))
   }, [])
 
+  /** Adds chats from a backup: new ones are added, a chat that is already here keeps whichever copy is newer. */
+  const merge = useCallback((incoming: Conversation[]) => {
+    setList((l) => {
+      const byId = new Map(l.map((c) => [c.id, c]))
+      for (const c of incoming) {
+        const have = byId.get(c.id)
+        if (!have || have.updatedAt < c.updatedAt) byId.set(c.id, c)
+      }
+      return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+    })
+  }, [])
+
   const remove = useCallback((id: string) => setList((l) => l.filter((c) => c.id !== id)), [])
   const clear = useCallback(() => setList([]), [])
 
-  return { list, upsert, update, remove, clear }
+  return { list, upsert, update, merge, remove, clear }
 }
 
 export const newMessage = (role: ChatMessage['role'], content: string, extra: Partial<ChatMessage> = {}): ChatMessage => ({

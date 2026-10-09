@@ -39,6 +39,11 @@ export async function putImage(id: string, dataUrl: string): Promise<void> {
   await tx('readwrite', (s) => s.put(blob, id))
 }
 
+/** Any stored file, as is (used when restoring a backup). */
+export async function putBlob(id: string, blob: Blob): Promise<void> {
+  await tx('readwrite', (s) => s.put(blob, id))
+}
+
 /** A document's text (`${id}`) or the shielded text the model saw (`${id}.wire`). */
 export async function putText(id: string, text: string): Promise<void> {
   await tx('readwrite', (s) => s.put(new Blob([text], { type: 'text/plain' }), id))
