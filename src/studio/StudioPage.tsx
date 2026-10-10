@@ -15,6 +15,7 @@ import { fetchZkStats, type ZkStats } from './stats'
  */
 
 const CATALOG: { id: string; title: string; note: string; poster: number }[] = [
+  { id: 'week', title: 'This week on NULL', note: '22 s · recap: 7 privacy updates in 6 days', poster: 11.5 },
   { id: 'research', title: 'Private Deep Research promo', note: '28 s · planned searches and a cited report, paid by proof', poster: 16.2 },
   { id: 'backup', title: 'Encrypted Backup promo', note: '28 s · take your chats anywhere, only you can open them', poster: 12.2 },
   { id: 'screenshot', title: 'Screenshot Shield promo', note: '27 s · emails, wallets, IBANs in pictures covered', poster: 10.4 },

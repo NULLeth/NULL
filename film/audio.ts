@@ -19,6 +19,7 @@ import { FACES_CUES, FACES_DURATION } from './faces'
 import { SCREENSHOT_CUES, SCREENSHOT_DURATION } from './screenshot'
 import { BACKUP_CUES, BACKUP_DURATION } from './backup'
 import { RESEARCH_CUES, RESEARCH_DURATION } from './research'
+import { WEEK_CUES, WEEK_DURATION } from './week'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -472,6 +473,20 @@ export const researchSound: Soundtrack = (ctx, out) => {
   sweep(ctx, out, K.streamStart, K.streamEnd, 500, 1800, 0.025)
   hit(ctx, out, K.sources, 0.28, 130, 55, 0.4)
   K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Week recap: a rising tick per card, a hit for the idea, the arrival at the end. */
+export const weekSound: Soundtrack = (ctx, out) => {
+  const K = WEEK_CUES
+  pad(ctx, out, 0, WEEK_DURATION, [1.0, K.idea[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  K.cards.forEach((at, i) => {
+    tick(ctx, out, at, [987.77, 1108.73, 1174.66, 1318.51, 1479.98, 1661.22, 1760][i], 0.1)
+    hit(ctx, out, at, 0.16, 140, 60, 0.25)
+  })
+  hit(ctx, out, K.idea[0] + 0.2, 0.32, 130, 55, 0.45)
+  tick(ctx, out, K.idea[0] + 1.0, 1760, 0.12)
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 

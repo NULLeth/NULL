@@ -1,4 +1,4 @@
-import { agentsSound, aiShieldSound, backupSound, chatSound, researchSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
+import { agentsSound, aiShieldSound, backupSound, chatSound, researchSound, weekSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
@@ -16,6 +16,7 @@ import { FACES_DURATION, drawFaces } from './faces'
 import { SCREENSHOT_DURATION, drawScreenshot } from './screenshot'
 import { BACKUP_DURATION, drawBackup } from './backup'
 import { RESEARCH_DURATION, drawResearch } from './research'
+import { WEEK_DURATION, drawWeek } from './week'
 
 export interface Film {
   duration: number
@@ -25,6 +26,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  week: { duration: WEEK_DURATION, sound: weekSound, draw: drawWeek },
   research: { duration: RESEARCH_DURATION, sound: researchSound, draw: drawResearch },
   backup: { duration: BACKUP_DURATION, sound: backupSound, draw: drawBackup },
   screenshot: { duration: SCREENSHOT_DURATION, sound: screenshotSound, draw: drawScreenshot },
