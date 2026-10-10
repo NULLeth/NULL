@@ -18,7 +18,7 @@ export interface WireMessage {
 export const textOf = (content: WireMessage['content']) =>
   typeof content === 'string' ? content : content.map((p) => (p.type === 'text' ? p.text : '')).join('\n')
 
-interface KeyHooks {
+export interface KeyHooks {
   /** short status line while the request is being authorized / running */
   onPhase: (text: string) => void
   signal?: AbortSignal
@@ -52,7 +52,7 @@ export interface GeneratedImage {
 /** OpenRouter's web plugin: a handful of results, engine picked by OpenRouter. */
 const WEB_PLUGIN = { id: 'web', max_results: 5 }
 
-const SYSTEM: WireMessage = {
+export const SYSTEM: WireMessage = {
   role: 'system',
   content: 'You are a helpful assistant reached through NULL, a private payment layer. Answer clearly and concisely.',
 }
@@ -66,7 +66,7 @@ type SdkError = Error & { code?: string; status?: number }
  * another conversation starts. If the key's cap is used up, it is settled and
  * renewed once.
  */
-async function withKey(
+export async function withKey(
   client: ZkClient,
   sessionId: string,
   hooks: KeyHooks,

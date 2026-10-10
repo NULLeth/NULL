@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -27,6 +27,7 @@ import type { BackupContents } from './backup'
 import { BackupDialog, type RestoreResult } from './BackupDialog'
 import { deleteImages, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
+import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
 import { VoiceButton } from './VoiceButton'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
@@ -57,6 +58,13 @@ const WEB_SUGGESTIONS = [
   'Latest news about zkAPI and private payments.',
   'What are ETH gas fees like right now?',
   'Top AI headlines today, with sources.',
+]
+
+const RESEARCH_SUGGESTIONS = [
+  'Compare Signal, Session and SimpleX for private messaging.',
+  'How do zero-knowledge proofs keep payments private?',
+  'What changed on Ethereum in 2026 so far?',
+  'Is it safe to keep a seed phrase in a password manager?',
 ]
 
 const IMAGE_SUGGESTIONS = [
@@ -726,6 +734,7 @@ function EmptyState({
   image,
   shieldOn,
   compare,
+  research,
 }: {
   onPick: (s: string) => void
   disabled: boolean
@@ -733,15 +742,18 @@ function EmptyState({
   image: boolean
   shieldOn: boolean
   compare: boolean
+  research: boolean
 }) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
       <LogoMark className="size-11 text-fg" />
       <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">
-        {image ? 'Imagine privately.' : compare ? 'Compare privately.' : web ? 'Search privately.' : 'Ask privately.'}
+        {image ? 'Imagine privately.' : research ? 'Research privately.' : compare ? 'Compare privately.' : web ? 'Search privately.' : 'Ask privately.'}
       </h1>
       <p className="mt-3 max-w-[480px] text-[14.5px] leading-relaxed text-muted">
-        {compare
+        {research
+          ? 'Research is on: the model plans a few web searches, runs them in parallel and writes a report with numbered sources. Usually under a minute.'
+          : compare
           ? 'Compare is on: every message goes to two models and both answers appear side by side, each with its own time and cost.'
           : image
           ? 'Image mode is on: describe a picture and it appears here. Reply to edit it. Images are saved only in this browser.'
@@ -750,7 +762,7 @@ function EmptyState({
             : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
       </p>
       <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
-        {(image ? IMAGE_SUGGESTIONS : web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
+        {(image ? IMAGE_SUGGESTIONS : research ? RESEARCH_SUGGESTIONS : web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
           <button
             key={s}
             type="button"
@@ -933,6 +945,45 @@ function CompareRow({ m, phase, streaming, onRetry }: { m: ChatMessage; phase: s
   )
 }
 
+/** The searches behind a research report: what was asked, how far each got, how many sources. */
+function ResearchTrail({ steps, streaming }: { steps: ResearchStep[]; streaming: boolean }) {
+  const [open, setOpen] = useState(true)
+  const sources = steps.reduce((n, s) => n + s.sources, 0)
+  if (!steps.length) return null
+  return (
+    <div className="mb-3 rounded-lg border border-line-2 bg-panel/50 px-3.5 py-2.5">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 font-mono text-[10.5px] tracking-[0.12em] text-dim hover:text-soft">
+        <Telescope className="size-3.5 text-eth" />
+        RESEARCH · {steps.length} SEARCHES · {sources} SOURCES
+        <ChevronDown className={`ml-auto size-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ol className="mt-2 space-y-1.5">
+          {steps.map((s, i) => (
+            <li key={i} className="flex items-center gap-2.5 text-[12.5px]">
+              <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                {s.status === 'searching' || (s.status === 'pending' && streaming) ? (
+                  <Spinner className="size-3" />
+                ) : s.status === 'done' ? (
+                  <Check className="size-3.5 text-ok" />
+                ) : s.status === 'error' ? (
+                  <X className="size-3.5 text-bad/80" />
+                ) : (
+                  <span className="size-1.5 rounded-full bg-faint" />
+                )}
+              </span>
+              <span className="min-w-0 truncate text-soft">{s.q}</span>
+              <span className="ml-auto shrink-0 font-mono text-[10.5px] text-dim">
+                {s.status === 'done' ? `${s.sources} source${s.sources === 1 ? '' : 's'}` : s.status === 'searching' ? 'searching…' : s.status === 'error' ? 'no result' : 'waiting'}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; phase: string; streamingId: string | null; onRetry: () => void }) {
   const wide = conv.messages.some((m) => m.alt)
   return (
@@ -948,6 +999,7 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
               <LogoMark className="size-3.5" />
             </span>
             <div className="min-w-0 flex-1">
+              {m.research && <ResearchTrail steps={m.research.steps} streaming={streamingId === m.id} />}
               {m.content ? <Markdown text={m.content} /> : null}
               {m.image && streamingId === m.id && <ImagePending aspect={conv.aspect ?? '1:1'} phase={phase} />}
               {m.images?.map((img) => <ChatImage key={img.id} id={img.id} aspect={img.aspect} mime={img.mime} />)}
@@ -976,6 +1028,12 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                     <span className="inline-flex items-center gap-1">
                       <Globe className="size-3" />
                       web
+                    </span>
+                  )}
+                  {m.research && (
+                    <span className="inline-flex items-center gap-1">
+                      <Telescope className="size-3" />
+                      research
                     </span>
                   )}
                   {m.image && (
@@ -1212,11 +1270,11 @@ export function ChatPage() {
   const run = useCallback(
     async (target: Conversation) => {
       const imageModel = target.imageModel ?? DEFAULT_IMAGE_MODEL
-      const compare = !!target.compare && !target.image
+      const compare = !!target.compare && !target.image && !target.research
       const model2 = target.model2 ?? secondModel(target.model)
       const reply = newMessage('assistant', '', {
         model: target.image ? imageModel : target.model,
-        ...(target.image ? { image: true } : target.web ? { web: true } : {}),
+        ...(target.image ? { image: true } : target.research ? { research: { steps: [] } } : target.web ? { web: true } : {}),
         ...(compare ? { alt: { model: model2, content: '' } } : {}),
       })
       const withReply = { ...target, messages: [...target.messages, reply], updatedAt: Date.now() }
@@ -1301,6 +1359,32 @@ export function ChatPage() {
           if (keyOwner.current && keyOwner.current.id !== withReply.id) await endSession()
           client = await live.client()
           if (!keyOwner.current) keyOwner.current = { id: withReply.id, startEth: live.balanceEth }
+        }
+        if (target.research) {
+          const history = await toWire(target.messages, 'a', canSee(target.model))
+          const patchResearch = (fn: (steps: ResearchStep[]) => ResearchStep[]) =>
+            update(withReply.id, (c) => ({
+              ...c,
+              updatedAt: Date.now(),
+              messages: c.messages.map((m) => (m.id === reply.id ? { ...m, research: { steps: fn(m.research?.steps ?? []) } } : m)),
+            }))
+          const rh: ResearchHooks = {
+            signal: ctrl.signal,
+            onPhase: (p: string) => setPhase(p),
+            shield: shielded,
+            onPlan: (qs) => patchResearch(() => qs.map((q) => ({ q, status: 'pending', sources: 0 }))),
+            onStep: (i, st) => patchResearch((steps) => steps.map((s, k) => (k === i ? { ...s, ...st } : s))),
+            onDelta: hooks.onDelta,
+            onSources: (list) => patch({ sources: list }),
+            onCost: (usd) => patch({ costUsd: usd }),
+          }
+          if (client) await researchLive(client, withReply.id, target.model, history, rh)
+          else {
+            await researchDemo(history, rh)
+            spend('web-search', 0.08, randHex(32), `research · ${modelLabel(target.model)}`)
+          }
+          patch({ ms: performance.now() - t0 })
+          return
         }
         // one side per model; in compare mode both run at once on this chat's key
         const side = async (model: string, history: WireMessage[], h: SendHooks, done: (f: { ms?: number; error?: string }) => void) => {
@@ -1432,18 +1516,24 @@ export function ChatPage() {
   const setModel = (model: string) => setConv(conv.image ? { imageModel: model } : { model })
 
   const toggleWeb = () => {
-    setConv({ web: !conv.web, image: false })
+    setConv({ web: !conv.web, image: false, research: false })
     textarea.current?.focus()
   }
 
   const toggleImage = () => {
     if (!conv.image) setAttached([])
-    setConv({ image: !conv.image, web: false, compare: false })
+    setConv({ image: !conv.image, web: false, compare: false, research: false })
     textarea.current?.focus()
   }
 
   const toggleCompare = () => {
-    setConv({ compare: !conv.compare, image: false, model2: conv.model2 ?? secondModel(conv.model) })
+    setConv({ compare: !conv.compare, image: false, research: false, model2: conv.model2 ?? secondModel(conv.model) })
+    textarea.current?.focus()
+  }
+
+  const toggleResearch = () => {
+    if (!conv.research) setAttached([])
+    setConv({ research: !conv.research, web: false, image: false, compare: false })
     textarea.current?.focus()
   }
 
@@ -1624,7 +1714,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -1676,6 +1766,15 @@ export function ChatPage() {
                 <span className="ml-auto">
                   ≈ {Math.round(imageModelOf(conv).approxUsd * 100)}¢ per image · {editing ? 'your next message edits the last image' : 'describe a picture'}
                 </span>
+              </div>
+            )}
+            {conv.research && (
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10.5px] text-dim">
+                <span className="inline-flex items-center gap-1 tracking-[0.12em] text-eth">
+                  <Telescope className="size-3.5" />
+                  RESEARCH
+                </span>
+                <span>3–5 web searches + a cited report · usually under a minute · a few cents to ~30¢ · placeholders never go into a search</span>
               </div>
             )}
             {voiceNote && (
@@ -1773,7 +1872,28 @@ export function ChatPage() {
                   }`}
                 >
                   <Globe className="size-3.5" />
-                  <span className="hidden sm:inline">WEB</span>
+                  <span className={conv.web ? 'hidden sm:inline' : 'hidden'}>WEB</span>
+                </button>
+              </Tooltip>
+              <Tooltip
+                content={
+                  conv.research
+                    ? 'Research is on: the model plans 3 to 5 web searches, runs them in parallel and writes a cited report. Each search and the report are paid from your private balance; usually a few cents to about 30¢.'
+                    : 'Deep research: planned web searches and a report with numbered sources.'
+                }
+              >
+                <button
+                  type="button"
+                  onClick={toggleResearch}
+                  disabled={sending}
+                  aria-pressed={!!conv.research}
+                  aria-label="Deep research"
+                  className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
+                    conv.research ? 'border-eth/40 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                  }`}
+                >
+                  <Telescope className="size-3.5" />
+                  <span className={conv.research ? 'hidden sm:inline' : 'hidden'}>RESEARCH</span>
                 </button>
               </Tooltip>
               <Tooltip content={conv.image ? 'Image mode is on: each message makes or edits a picture. Images stay in this browser.' : 'Turn on image mode to create pictures privately.'}>
@@ -1788,7 +1908,7 @@ export function ChatPage() {
                   }`}
                 >
                   <ImageIcon className="size-3.5" />
-                  <span className="hidden sm:inline">IMAGE</span>
+                  <span className={conv.image ? 'hidden sm:inline' : 'hidden'}>IMAGE</span>
                 </button>
               </Tooltip>
               <Tooltip
@@ -1808,7 +1928,7 @@ export function ChatPage() {
                   }`}
                 >
                   <ShieldCheck className="size-3.5" />
-                  <span className="hidden sm:inline">SHIELD</span>
+                  <span className={shieldCfg.on ? 'hidden sm:inline' : 'hidden'}>SHIELD</span>
                 </button>
               </Tooltip>
               <Tooltip content={conv.compare ? 'Compare is on: two models answer every message, side by side. Each answer is paid separately.' : 'Ask two models at once and compare their answers.'}>
@@ -1823,7 +1943,7 @@ export function ChatPage() {
                   }`}
                 >
                   <Columns2 className="size-3.5" />
-                  <span className="hidden sm:inline">COMPARE</span>
+                  <span className={conv.compare ? 'hidden sm:inline' : 'hidden'}>COMPARE</span>
                 </button>
               </Tooltip>
               <textarea
@@ -1849,7 +1969,9 @@ export function ChatPage() {
                       ? editing
                         ? 'Describe a change, e.g. "make it night"…'
                         : 'Describe an image…'
-                      : conv.web
+                      : conv.research
+                        ? 'Ask a research question…'
+                        : conv.web
                         ? 'Search the web privately…'
                         : readyFiles.length
                           ? 'Ask about your files…'
@@ -1886,7 +2008,7 @@ export function ChatPage() {
                 </button>
               )}
             </div>
-            <PrivacyLine web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} />
+            <PrivacyLine web={!!conv.web || !!conv.research} image={!!conv.image} shieldOn={shieldCfg.on} />
           </div>
         </div>
       </main>

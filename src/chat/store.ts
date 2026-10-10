@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { IS_LIVE } from '../config/mode'
 import { randId } from '../lib/random'
+import type { ResearchStep } from './research'
 import type { ShieldMap } from './shield'
 
 /** Conversations live only in this browser. Nothing is stored on a server. Demo chats are kept apart. */
@@ -63,6 +64,8 @@ export interface ChatMessage {
   alt?: AltAnswer
   /** documents and photos attached to this user message */
   files?: ChatFile[]
+  /** Private Deep Research: the searches behind this report */
+  research?: { steps: ResearchStep[] }
 }
 
 export interface Conversation {
@@ -84,6 +87,8 @@ export interface Conversation {
   shieldMap?: ShieldMap
   /** compare mode: every message also goes to model2 */
   compare?: boolean
+  /** research mode: each message becomes planned web searches and a cited report */
+  research?: boolean
   model2?: string
 }
 
