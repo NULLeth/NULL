@@ -18,6 +18,7 @@ import { VOICE_CUES, VOICE_DURATION } from './voice'
 import { FACES_CUES, FACES_DURATION } from './faces'
 import { SCREENSHOT_CUES, SCREENSHOT_DURATION } from './screenshot'
 import { BACKUP_CUES, BACKUP_DURATION } from './backup'
+import { RESEARCH_CUES, RESEARCH_DURATION } from './research'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -452,6 +453,25 @@ export const backupSound: Soundtrack = (ctx, out) => {
   for (let i = 0; i < n; i++) click(ctx, out, K.pass[0] + ((K.pass[1] - K.pass[0]) * i) / n, 0.07, 19000 + i * 67)
   hit(ctx, out, K.restored, 0.3, 130, 55, 0.4)
   K.points.forEach((at) => hit(ctx, out, at, 0.28, 130, 55, 0.4))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Private Deep Research promo: the switch, typing, a tick per search sent and per search back, the report, the hops. */
+export const researchSound: Soundtrack = (ctx, out) => {
+  const K = RESEARCH_CUES
+  pad(ctx, out, 0, RESEARCH_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, K.toggle, 1174.66, 0.13)
+  const n = 40
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 20000 + i * 71)
+  tick(ctx, out, K.send, 1318.51, 0.12)
+  tick(ctx, out, K.plan, 987.77, 0.1)
+  K.searches.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.08))
+  sweep(ctx, out, K.searches[0], K.found[3], 300, 2400, 0.035)
+  K.found.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22, 1760][i], 0.1))
+  sweep(ctx, out, K.streamStart, K.streamEnd, 500, 1800, 0.025)
+  hit(ctx, out, K.sources, 0.28, 130, 55, 0.4)
+  K.hops.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98, 1661.22][i], 0.09))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
