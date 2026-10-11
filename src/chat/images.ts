@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
+import { randId } from '../lib/random'
 
 /**
  * Generated images and attached files (cleaned photos, document text) live in this
  * browser's IndexedDB (localStorage is far too small for them). Chat messages only keep
  * the id. Nothing is uploaded anywhere.
+ *
+ * Ghost chats are the exception: their files get ids that start with "ghost" and are kept
+ * only in memory here, never written to disk. Closing the tab drops them.
  */
+
+const memory = new Map<string, Blob>()
+const inMemory = (id: string) => id.startsWith('ghost')
+
+/** A new file id; ghost chats get one that stays in memory. */
+export const fileId = (kind: string, ghost?: boolean) => randId(ghost ? `ghost${kind}` : kind, 12)
 
 const DB = 'null.chat.images'
 const STORE = 'images'
@@ -13,8 +23,11 @@ let dbPromise: Promise<IDBDatabase> | null = null
 
 function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE)
+    // version 2 only makes sure the store exists (a database can exist without it)
+    const req = indexedDB.open(DB, 2)
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE)
+    }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
@@ -35,18 +48,18 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
 }
 
 export async function putImage(id: string, dataUrl: string): Promise<void> {
-  const blob = await (await fetch(dataUrl)).blob()
-  await tx('readwrite', (s) => s.put(blob, id))
+  await putBlob(id, await (await fetch(dataUrl)).blob())
 }
 
 /** Any stored file, as is (used when restoring a backup). */
 export async function putBlob(id: string, blob: Blob): Promise<void> {
-  await tx('readwrite', (s) => s.put(blob, id))
+  if (inMemory(id)) memory.set(id, blob)
+  else await tx('readwrite', (s) => s.put(blob, id))
 }
 
 /** A document's text (`${id}`) or the shielded text the model saw (`${id}.wire`). */
 export async function putText(id: string, text: string): Promise<void> {
-  await tx('readwrite', (s) => s.put(new Blob([text], { type: 'text/plain' }), id))
+  await putBlob(id, new Blob([text], { type: 'text/plain' }))
 }
 
 export async function getText(id: string): Promise<string | null> {
@@ -55,6 +68,7 @@ export async function getText(id: string): Promise<string | null> {
 }
 
 export async function getImageBlob(id: string): Promise<Blob | null> {
+  if (inMemory(id)) return memory.get(id) ?? null
   try {
     return ((await tx<Blob>('readonly', (s) => s.get(id))) as Blob | undefined) ?? null
   } catch {
@@ -75,6 +89,11 @@ export async function getImageDataUrl(id: string): Promise<string | null> {
 }
 
 export async function deleteImages(ids: string[]): Promise<void> {
+  for (const id of ids.filter(inMemory)) {
+    memory.delete(id)
+    memory.delete(`${id}.wire`)
+  }
+  ids = ids.filter((id) => !inMemory(id))
   if (!ids.length) return
   try {
     await tx('readwrite', (s) => {

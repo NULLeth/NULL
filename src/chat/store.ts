@@ -89,6 +89,8 @@ export interface Conversation {
   compare?: boolean
   /** research mode: each message becomes planned web searches and a cited report */
   research?: boolean
+  /** ghost chat: never saved, files kept only in memory, erased when you leave it */
+  ghost?: boolean
   model2?: string
 }
 
@@ -119,7 +121,8 @@ export function useConversations() {
     const t = setTimeout(() => {
       try {
         // keep only chats that have messages; cap the history
-        localStorage.setItem(KEY, JSON.stringify(list.filter((c) => c.messages.length).slice(0, 100)))
+        // ghost chats are never written down
+        localStorage.setItem(KEY, JSON.stringify(list.filter((c) => c.messages.length && !c.ghost).slice(0, 100)))
       } catch {
         /* storage full or blocked: chats stay in memory for this tab */
       }

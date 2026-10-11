@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -25,7 +25,7 @@ import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, 
 import { ACCEPT, fileKind, MAX_FILES, photoUrl, readFile, type DocFile, type ReadFile } from './files'
 import type { BackupContents } from './backup'
 import { BackupDialog, type RestoreResult } from './BackupDialog'
-import { deleteImages, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
+import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
 import { VoiceButton } from './VoiceButton'
@@ -90,6 +90,23 @@ function loadShield(): { on: boolean; words: string[]; ai: boolean } {
     /* fall through */
   }
   return { on: true, words: [], ai: false }
+}
+
+/** Auto-delete: chats untouched for this many days are removed from this browser (0 = keep). */
+const AUTO_KEY = 'null.autodelete.v1'
+const AUTO_OPTIONS = [
+  { days: 0, label: 'off' },
+  { days: 1, label: '24 hours' },
+  { days: 7, label: '7 days' },
+  { days: 30, label: '30 days' },
+]
+function loadAutoDelete(): number {
+  try {
+    const n = Number(localStorage.getItem(AUTO_KEY))
+    return AUTO_OPTIONS.some((o) => o.days === n) ? n : 0
+  } catch {
+    return 0
+  }
 }
 
 type AiStatus = { status: 'off' | 'loading' | 'ready' | 'error'; progress: number }
@@ -231,6 +248,8 @@ function Sidebar({
   onDelete,
   onClear,
   onBackup,
+  autoDays,
+  onAutoDays,
 }: {
   list: Conversation[]
   activeId: string
@@ -239,6 +258,8 @@ function Sidebar({
   onDelete: (id: string) => void
   onClear: () => void
   onBackup: (tab: 'export' | 'import') => void
+  autoDays: number
+  onAutoDays: (days: number) => void
 }) {
   const now = useNow(30_000)
   return (
@@ -270,9 +291,12 @@ function Sidebar({
             className={`group flex items-center gap-1 rounded-md transition-colors ${c.id === activeId ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
           >
             <button type="button" onClick={() => onSelect(c.id)} className="min-w-0 flex-1 px-3 py-2 text-left">
-              <div className={`truncate text-[13px] ${c.id === activeId ? 'text-fg' : 'text-soft'}`}>{c.title}</div>
+              <div className={`flex items-center gap-1.5 truncate text-[13px] ${c.id === activeId ? 'text-fg' : 'text-soft'}`}>
+                {c.ghost && <Ghost className="size-3.5 shrink-0 text-eth" />}
+                <span className="truncate">{c.title}</span>
+              </div>
               <div className="mt-0.5 truncate font-mono text-[10.5px] text-dim">
-                {c.image ? modelLabel(c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.compare ? `${modelLabel(c.model)} vs ${modelLabel(c.model2 ?? secondModel(c.model))}` : modelLabel(c.model)} ·{' '}
+                {c.ghost ? 'ghost · erased when you leave it' : c.image ? modelLabel(c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.compare ? `${modelLabel(c.model)} vs ${modelLabel(c.model2 ?? secondModel(c.model))}` : modelLabel(c.model)} ·{' '}
                 {ago(c.updatedAt, now)}
               </div>
             </button>
@@ -304,6 +328,25 @@ function Sidebar({
             <span className="ml-auto tracking-normal text-faint">back up · restore</span>
           </button>
         </div>
+      )}
+      {(list.length > 0 || autoDays > 0) && (
+        <label className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-line px-3 py-1.5 font-mono text-[10.5px] tracking-[0.12em] text-dim">
+          <Trash2 className="size-3.5 shrink-0" />
+          AUTO-DELETE
+          <Tooltip content="Chats you haven't used for this long are deleted from this browser, files and images too. Backups you saved are not touched.">
+            <select
+              value={autoDays}
+              onChange={(e) => onAutoDays(Number(e.target.value))}
+              className={`ml-auto bg-transparent text-right tracking-normal outline-none ${autoDays ? 'text-ok/90' : 'text-faint'}`}
+            >
+              {AUTO_OPTIONS.map((o) => (
+                <option key={o.days} value={o.days} className="bg-panel text-fg">
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Tooltip>
+        </label>
       )}
       <BalanceMini />
     </div>
@@ -735,6 +778,7 @@ function EmptyState({
   shieldOn,
   compare,
   research,
+  ghost,
 }: {
   onPick: (s: string) => void
   disabled: boolean
@@ -743,9 +787,21 @@ function EmptyState({
   shieldOn: boolean
   compare: boolean
   research: boolean
+  ghost: boolean
 }) {
   return (
     <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
+      {ghost ? (
+        <div className="mb-6 w-full max-w-[520px] rounded-xl border border-dashed border-eth/40 bg-eth/[0.05] px-5 py-4">
+          <div className="flex items-center justify-center gap-2 font-mono text-[11px] tracking-[0.16em] text-eth">
+            <Ghost className="size-4" />
+            GHOST CHAT
+          </div>
+          <p className="mt-2 text-[14px] leading-relaxed text-soft">
+            Nothing is saved: not the chat, not your files, not even in this browser. Leave the chat or close the tab and it&apos;s gone.
+          </p>
+        </div>
+      ) : null}
       <LogoMark className="size-11 text-fg" />
       <h1 className="mt-5 text-[30px] font-medium tracking-[-0.03em] text-fg">
         {image ? 'Imagine privately.' : research ? 'Research privately.' : compare ? 'Compare privately.' : web ? 'Search privately.' : 'Ask privately.'}
@@ -759,7 +815,9 @@ function EmptyState({
           ? 'Image mode is on: describe a picture and it appears here. Reply to edit it. Images are saved only in this browser.'
           : web
             ? 'Web search is on: answers use live results and list their sources. Paid from your private balance like every request.'
-            : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
+            : ghost
+              ? 'Paid from your private balance with a zero-knowledge proof, like every chat. This one leaves no history at all, not even here.'
+              : 'Each chat gets its own short-lived key, paid from your private balance with a zero-knowledge proof. Your history stays in this browser.'}
       </p>
       <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
         {(image ? IMAGE_SUGGESTIONS : research ? RESEARCH_SUGGESTIONS : web ? WEB_SUGGESTIONS : SUGGESTIONS).map((s) => (
@@ -1096,6 +1154,7 @@ export function ChatPage() {
   const [dragging, setDragging] = useState(false)
   const [voiceNote, setVoiceNote] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
   const [backup, setBackup] = useState<'export' | 'import' | null>(null)
+  const [autoDays, setAutoDays] = useState(loadAutoDelete)
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1348,7 +1407,7 @@ export function ChatPage() {
             img = await sendImageDemo(req, hooks)
             spend('image-gen', img.costUsd ?? 0.04, randHex(32), `image · ${modelLabel(imageModel)}`)
           }
-          const id = randId('img', 12)
+          const id = fileId('img', target.ghost)
           await putImage(id, img.dataUrl)
           patch({ images: [{ id, aspect: req.aspect, mime: mimeOf(img.dataUrl) }], costUsd: img.costUsd, ms: performance.now() - t0 })
           return
@@ -1446,14 +1505,14 @@ export function ChatPage() {
       for (const a of files) {
         const f = a.file!
         if (f.kind === 'photo') {
-          const id = randId('pic', 12)
+          const id = fileId('pic', conv.ghost)
           const blur = a.blur !== false && f.faces > 0
           const cover = a.cover !== false && f.covered.length > 0
           await putImage(id, photoUrl(f, blur, cover))
           stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed, faces: blur ? f.faces : 0, covered: cover ? f.covered.length : 0 })
           continue
         }
-        const id = randId('doc', 12)
+        const id = fileId('doc', conv.ghost)
         const block = docBlock(f)
         await putText(id, block)
         let shielded = 0
@@ -1493,8 +1552,27 @@ export function ChatPage() {
     void run(trimmed)
   }
 
+  /** A ghost chat is erased the moment you leave it: messages, files, images. */
+  const leaveGhost = (nextId?: string) => {
+    if (!conv.ghost || nextId === conv.id) return
+    if (conv.messages.length) {
+      void deleteImages(imageIds(conv))
+      remove(conv.id)
+    }
+  }
+
+  const startGhost = () => {
+    if (sending) return
+    leaveGhost()
+    setDraft({ ...newConversation(conv.model), ghost: true })
+    setActiveId('')
+    setDrawer(false)
+    setTimeout(() => textarea.current?.focus(), 50)
+  }
+
   const startNew = () => {
     if (sending) return
+    leaveGhost()
     setDraft({ ...newConversation(conv.model), web: !!conv.web, image: !!conv.image, imageModel: conv.imageModel, aspect: conv.aspect })
     setActiveId('')
     setDrawer(false)
@@ -1503,9 +1581,36 @@ export function ChatPage() {
 
   const select = (id: string) => {
     if (sending) return
+    leaveGhost(id)
     setActiveId(id)
     setDrawer(false)
   }
+
+  // auto-delete: chats untouched for longer than the chosen time leave this browser, files too
+  const listRef = useRef(list)
+  listRef.current = list
+  const busyRef = useRef<{ sending: boolean; id: string }>({ sending, id: conv.id })
+  busyRef.current = { sending, id: conv.id }
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTO_KEY, String(autoDays))
+    } catch {
+      /* setting stays for this tab */
+    }
+    if (!autoDays) return
+    const purge = () => {
+      const cutoff = Date.now() - autoDays * 86_400_000
+      const old = listRef.current.filter((c) => !c.ghost && c.updatedAt < cutoff && !(busyRef.current.sending && busyRef.current.id === c.id))
+      for (const c of old) {
+        void deleteImages(imageIds(c))
+        remove(c.id)
+      }
+      if (old.some((c) => c.id === busyRef.current.id)) setActiveId('')
+    }
+    purge()
+    const t = setInterval(purge, 10 * 60_000)
+    return () => clearInterval(t)
+  }, [autoDays, remove])
 
   /** changes this chat's settings (stored once it has messages, else on the draft) */
   const setConv = (fields: Partial<Conversation>) => {
@@ -1586,6 +1691,8 @@ export function ChatPage() {
         setDrawer(false)
         setBackup(tab)
       }}
+      autoDays={autoDays}
+      onAutoDays={setAutoDays}
     />
   )
 
@@ -1705,6 +1812,27 @@ export function ChatPage() {
             </Button>
           )}
           <div className="ml-auto flex items-center gap-2">
+            <Tooltip
+              content={
+                conv.ghost
+                  ? 'You are in a ghost chat: nothing is saved, not even in this browser. Click to leave it; it is erased.'
+                  : 'Start a ghost chat: nothing is saved, files stay in memory only, and it is erased when you leave it.'
+              }
+            >
+              <button
+                type="button"
+                onClick={conv.ghost ? startNew : startGhost}
+                disabled={sending}
+                aria-pressed={!!conv.ghost}
+                aria-label={conv.ghost ? 'Leave ghost chat' : 'Start a ghost chat'}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] tracking-[0.14em] transition-colors disabled:opacity-50 ${
+                  conv.ghost ? 'border-dashed border-eth/50 bg-eth/10 text-eth' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                }`}
+              >
+                <Ghost className="size-3.5" />
+                <span className="hidden sm:inline">{conv.ghost ? 'GHOST · LEAVE' : 'GHOST'}</span>
+              </button>
+            </Tooltip>
             <a href={IS_LIVE ? '/chat?demo' : '/chat'} className={`hidden rounded-full border px-2.5 py-1 font-mono text-[10px] tracking-[0.14em] sm:inline-flex ${IS_LIVE ? 'border-ok/30 text-ok/90' : 'border-warn/30 text-warn/90'}`}>
               {IS_LIVE ? 'LIVE' : 'DEMO'}
             </a>
@@ -1714,7 +1842,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -1766,6 +1894,12 @@ export function ChatPage() {
                 <span className="ml-auto">
                   ≈ {Math.round(imageModelOf(conv).approxUsd * 100)}¢ per image · {editing ? 'your next message edits the last image' : 'describe a picture'}
                 </span>
+              </div>
+            )}
+            {conv.ghost && conv.messages.length > 0 && (
+              <div className="mb-2 flex items-center gap-1.5 font-mono text-[10.5px] text-eth/90">
+                <Ghost className="size-3.5" />
+                GHOST CHAT · not saved anywhere · leaving it or closing the tab erases it
               </div>
             )}
             {conv.research && (
@@ -2016,7 +2150,7 @@ export function ChatPage() {
         open={backup !== null}
         initialTab={backup ?? 'export'}
         onClose={() => setBackup(null)}
-        conversations={list.filter((c) => c.messages.length)}
+        conversations={list.filter((c) => c.messages.length && !c.ghost)}
         shieldWords={shieldCfg.words}
         onRestore={restoreBackup}
       />
