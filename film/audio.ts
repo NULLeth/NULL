@@ -20,6 +20,7 @@ import { SCREENSHOT_CUES, SCREENSHOT_DURATION } from './screenshot'
 import { BACKUP_CUES, BACKUP_DURATION } from './backup'
 import { RESEARCH_CUES, RESEARCH_DURATION } from './research'
 import { WEEK_CUES, WEEK_DURATION } from './week'
+import { GHOST_CUES, GHOST_DURATION } from './ghost'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -487,6 +488,24 @@ export const weekSound: Soundtrack = (ctx, out) => {
   })
   hit(ctx, out, K.idea[0] + 0.2, 0.32, 130, 55, 0.45)
   tick(ctx, out, K.idea[0] + 1.0, 1760, 0.12)
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Ghost Chats promo: the three "where" rows, the ghost switch, typing, a soft breath as the chat dissolves, ticks for what's left. */
+export const ghostSound: Soundtrack = (ctx, out) => {
+  const K = GHOST_CUES
+  pad(ctx, out, 0, GHOST_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  ;[0.4, 1.0, 1.6].forEach((d, i) => tick(ctx, out, K.where[0] + d, [987.77, 1174.66, 1479.98][i], 0.09))
+  tick(ctx, out, K.ghostOn, 1318.51, 0.12)
+  const n = 36
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 21000 + i * 73)
+  tick(ctx, out, K.send, 1318.51, 0.12)
+  tick(ctx, out, K.leave, 987.77, 0.12)
+  sweep(ctx, out, K.dissolve[0], K.dissolve[1], 2400, 200, 0.05)
+  K.checks.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  tick(ctx, out, K.pick, 1174.66, 0.11)
+  hit(ctx, out, K.gone[0], 0.22, 140, 60, 0.3)
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
