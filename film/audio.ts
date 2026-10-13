@@ -21,6 +21,7 @@ import { BACKUP_CUES, BACKUP_DURATION } from './backup'
 import { RESEARCH_CUES, RESEARCH_DURATION } from './research'
 import { WEEK_CUES, WEEK_DURATION } from './week'
 import { GHOST_CUES, GHOST_DURATION } from './ghost'
+import { CROWD_CUES, CROWD_DURATION } from './crowd'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -506,6 +507,22 @@ export const ghostSound: Soundtrack = (ctx, out) => {
   K.checks.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   tick(ctx, out, K.pick, 1174.66, 0.11)
   hit(ctx, out, K.gone[0], 0.22, 140, 60, 0.3)
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Your Crowd promo: the crowd appears, a shimmer while the request is out, the click, the two examples, the public/private columns. */
+export const crowdSound: Soundtrack = (ctx, out) => {
+  const K = CROWD_CUES
+  pad(ctx, out, 0, CROWD_DURATION, [1.0, K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.crowd[0] + 0.2, K.crowd[0] + 1.3, 300, 1400, 0.03)
+  sweep(ctx, out, K.request, K.request + 1.2, 800, 2600, 0.035)
+  tick(ctx, out, K.request + 1.0, 1479.98, 0.1)
+  tick(ctx, out, K.open, 1174.66, 0.12)
+  hit(ctx, out, K.exampleA, 0.26, 130, 55, 0.35)
+  hit(ctx, out, K.exampleB, 0.26, 120, 50, 0.35)
+  tick(ctx, out, K.public[0] + 0.3, 987.77, 0.09)
+  tick(ctx, out, K.public[0] + 0.8, 1318.51, 0.09)
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
