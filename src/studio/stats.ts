@@ -52,21 +52,28 @@ async function vaultBalanceEth(): Promise<number> {
   return j.result ? Number(BigInt(j.result)) / 1e18 : 0
 }
 
-export async function fetchZkStats(): Promise<ZkStats> {
-  const [logs, vaultEth] = await Promise.all([vaultLogs(), vaultBalanceEth()])
-  const deposits: { ts: number; gwei: number }[] = []
+/** Every deposit into the vault (time, amount in gwei) and how many notes were closed since. */
+export async function vaultDeposits(): Promise<{ deposits: { ts: number; gwei: number; exp: number }[]; closed: number }> {
+  const logs = await vaultLogs()
+  const deposits: { ts: number; gwei: number; exp: number }[] = []
   let closed = 0
   for (const l of logs) {
     const name = l.decoded?.method_call?.split('(')[0]
     const ts = Date.parse(l.block_timestamp)
     if (name === 'NoteDeposited') {
-      const amount = l.decoded?.parameters?.find((p) => p.name === 'amount')?.value ?? '0'
-      deposits.push({ ts, gwei: Number(amount) })
+      const param = (n: string) => l.decoded?.parameters?.find((p) => p.name === n)?.value ?? '0'
+      // expiryTs is the UTC midnight after the deposit + 30 days, so it names the deposit day
+      deposits.push({ ts, gwei: Number(param('amount')), exp: Number(param('expiryTs')) })
     } else if (name === 'MutualClose' || name === 'EscapeWithdrawalFinalized' || name === 'ExpiredClaimed') {
       closed++
     }
   }
   deposits.sort((a, b) => a.ts - b.ts)
+  return { deposits, closed }
+}
+
+export async function fetchZkStats(): Promise<ZkStats> {
+  const [{ deposits, closed }, vaultEth] = await Promise.all([vaultDeposits(), vaultBalanceEth()])
   const now = Date.now()
   const series = deposits.map((d, i) => ({ ts: d.ts, notes: i + 1 }))
   return {

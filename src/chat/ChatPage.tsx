@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -25,6 +25,8 @@ import { sendDemo, sendImageDemo, sendImageLive, sendLive, type GeneratedImage, 
 import { ACCEPT, fileKind, MAX_FILES, photoUrl, readFile, type DocFile, type ReadFile } from './files'
 import type { BackupContents } from './backup'
 import { BackupDialog, type RestoreResult } from './BackupDialog'
+import { useCrowd } from './crowd'
+import { CrowdDialog } from './CrowdDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
@@ -196,9 +198,10 @@ const expiryDate = (expiryTs: number) => new Date(expiryTs * 1000).toLocaleDateS
 
 // ─── sidebar ─────────────────────────────────────────────────────────────────
 
-function BalanceMini() {
+function BalanceMini({ onCrowd }: { onCrowd: () => void }) {
   const account = useAccount()
   const { fund, withdraw } = useActions()
+  const crowd = useCrowd()
   return (
     <div className="border-t border-line p-4">
       <div className="flex items-center justify-between">
@@ -221,6 +224,10 @@ function BalanceMini() {
         )}
       </div>
       <div className="mt-0.5 font-mono text-[11px] text-dim">{account.balanceUsd != null ? `≈ ${fmtUsd(account.balanceUsd, { cents: true })}` : '—'}</div>
+      <button type="button" onClick={onCrowd} className="mt-1.5 inline-flex items-center gap-1.5 font-mono text-[10.5px] text-ok/80 hover:text-ok">
+        <Users className="size-3" />
+        {crowd.data ? `hidden among ${crowd.data.open} open notes` : 'your crowd'} ›
+      </button>
       {IS_LIVE && account.hasNote && account.expiryTs != null && (
         <Tooltip content="Private balances expire 30 days after funding. Withdraw before then: after that the operator can claim what's left.">
           <div className={`mt-1 font-mono text-[10.5px] ${(daysLeft(account.expiryTs) ?? 99) <= 7 ? 'text-warn' : 'text-dim'}`}>
@@ -250,6 +257,7 @@ function Sidebar({
   onBackup,
   autoDays,
   onAutoDays,
+  onCrowd,
 }: {
   list: Conversation[]
   activeId: string
@@ -260,6 +268,7 @@ function Sidebar({
   onBackup: (tab: 'export' | 'import') => void
   autoDays: number
   onAutoDays: (days: number) => void
+  onCrowd: () => void
 }) {
   const now = useNow(30_000)
   return (
@@ -348,7 +357,7 @@ function Sidebar({
           </Tooltip>
         </label>
       )}
-      <BalanceMini />
+      <BalanceMini onCrowd={onCrowd} />
     </div>
   )
 }
@@ -1155,6 +1164,7 @@ export function ChatPage() {
   const [voiceNote, setVoiceNote] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null)
   const [backup, setBackup] = useState<'export' | 'import' | null>(null)
   const [autoDays, setAutoDays] = useState(loadAutoDelete)
+  const [crowdOpen, setCrowdOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1693,6 +1703,10 @@ export function ChatPage() {
       }}
       autoDays={autoDays}
       onAutoDays={setAutoDays}
+      onCrowd={() => {
+        setDrawer(false)
+        setCrowdOpen(true)
+      }}
     />
   )
 
@@ -2146,6 +2160,7 @@ export function ChatPage() {
           </div>
         </div>
       </main>
+      <CrowdDialog open={crowdOpen} onClose={() => setCrowdOpen(false)} />
       <BackupDialog
         open={backup !== null}
         initialTab={backup ?? 'export'}
