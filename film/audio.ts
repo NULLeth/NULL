@@ -22,6 +22,7 @@ import { RESEARCH_CUES, RESEARCH_DURATION } from './research'
 import { WEEK_CUES, WEEK_DURATION } from './week'
 import { GHOST_CUES, GHOST_DURATION } from './ghost'
 import { CROWD_CUES, CROWD_DURATION } from './crowd'
+import { SHARE_CUES, SHARE_DURATION } from './share'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -523,6 +524,25 @@ export const crowdSound: Soundtrack = (ctx, out) => {
   hit(ctx, out, K.exampleB, 0.26, 120, 50, 0.35)
   tick(ctx, out, K.public[0] + 0.3, 987.77, 0.09)
   tick(ctx, out, K.public[0] + 0.8, 1318.51, 0.09)
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Private Share promo: share, create, copy, the link splitting in two, the request typed out, the reader's page, three points. */
+export const shareSound: Soundtrack = (ctx, out) => {
+  const K = SHARE_CUES
+  pad(ctx, out, 0, SHARE_DURATION, [1.0, K.split[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, K.share, 1174.66, 0.12)
+  tick(ctx, out, K.create, 1318.51, 0.12)
+  sweep(ctx, out, K.link - 0.1, K.link + 0.6, 600, 2200, 0.035)
+  tick(ctx, out, K.copy, 1479.98, 0.11)
+  hit(ctx, out, K.split[0] + 0.7, 0.26, 130, 55, 0.35)
+  sweep(ctx, out, K.split[0] + 0.6, K.split[0] + 1.4, 1800, 400, 0.03)
+  const n = 13
+  for (let i = 0; i < n; i++) click(ctx, out, K.request + 0.3 + (0.7 * i) / n, 0.08, 31000 + i * 71)
+  tick(ctx, out, K.request + 1.5, 1661.22, 0.1)
+  hit(ctx, out, K.reader[0] + 0.2, 0.24, 120, 50, 0.3)
+  K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
