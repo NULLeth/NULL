@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -26,6 +26,7 @@ import { ACCEPT, fileKind, MAX_FILES, photoUrl, readFile, type DocFile, type Rea
 import type { BackupContents } from './backup'
 import { BackupDialog, type RestoreResult } from './BackupDialog'
 import { useCrowd } from './crowd'
+import { ShareDialog, type ShareItem } from './ShareDialog'
 import { CrowdDialog } from './CrowdDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
@@ -1051,7 +1052,19 @@ function ResearchTrail({ steps, streaming }: { steps: ResearchStep[]; streaming:
   )
 }
 
-function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; phase: string; streamingId: string | null; onRetry: () => void }) {
+function Messages({
+  conv,
+  phase,
+  streamingId,
+  onRetry,
+  onShare,
+}: {
+  conv: Conversation
+  phase: string
+  streamingId: string | null
+  onRetry: () => void
+  onShare: (item: ShareItem) => void
+}) {
   const wide = conv.messages.some((m) => m.alt)
   return (
     <div className={`mx-auto w-full ${wide ? 'max-w-[1120px]' : 'max-w-[780px]'} space-y-7 px-4 py-8 sm:px-6`}>
@@ -1127,6 +1140,21 @@ function Messages({ conv, phase, streamingId, onRetry }: { conv: Conversation; p
                     <span className="text-ok/80">paid by proof ✓</span>
                   </Tooltip>
                   {!!m.images?.length && i === conv.messages.length - 1 && <span className="text-faint">reply to edit this image</span>}
+                  {!m.image && m.content && (
+                    <Tooltip content="Share this answer with a link that carries it inside. Nothing is uploaded.">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const q = conv.messages[i - 1]
+                          onShare({ q: q?.content ?? '', qWire: q?.wire, a: m.content, aWire: m.wire, model: m.model ?? conv.model, ts: m.ts, sources: m.sources })
+                        }}
+                        className="inline-flex items-center gap-1 text-dim transition-colors hover:text-fg"
+                      >
+                        <Share2 className="size-3" />
+                        share
+                      </button>
+                    </Tooltip>
+                  )}
                 </div>
               )}
             </div>
@@ -1165,6 +1193,7 @@ export function ChatPage() {
   const [backup, setBackup] = useState<'export' | 'import' | null>(null)
   const [autoDays, setAutoDays] = useState(loadAutoDelete)
   const [crowdOpen, setCrowdOpen] = useState(false)
+  const [shareItem, setShareItem] = useState<ShareItem | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1856,7 +1885,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -2161,6 +2190,7 @@ export function ChatPage() {
         </div>
       </main>
       <CrowdDialog open={crowdOpen} onClose={() => setCrowdOpen(false)} />
+      <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
       <BackupDialog
         open={backup !== null}
         initialTab={backup ?? 'export'}

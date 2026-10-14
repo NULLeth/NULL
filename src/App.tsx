@@ -26,18 +26,21 @@ const IS_CHAT = PATH === '/chat'
 const IS_STUDIO = PATH === '/studio'
 const IS_BURN = PATH === '/burn'
 const IS_AGENTS = PATH === '/agents'
+const IS_SHARE = PATH === '/s'
 /** Studio is a private tool page; it and the film code load only on /studio. */
 const StudioPage = lazy(() => import('./studio/StudioPage'))
 /** The creator's buyback tool, also unlinked. */
 const BurnPage = lazy(() => import('./burn/BurnPage'))
 /** The NULL Agent Kit page. */
 const AgentsPage = lazy(() => import('./agents/AgentsPage'))
+/** A shared answer, unpacked from the link's hash. */
+const SharePage = lazy(() => import('./chat/SharePage'))
 
 export function App() {
-  if (IS_STUDIO || IS_BURN || IS_AGENTS) {
+  if (IS_STUDIO || IS_BURN || IS_AGENTS || IS_SHARE) {
     return (
       <Suspense fallback={<div className="min-h-[100dvh] bg-bg" />}>
-        {IS_AGENTS ? <AgentsPage /> : IS_BURN ? <BurnPage /> : <StudioPage />}
+        {IS_SHARE ? <SharePage /> : IS_AGENTS ? <AgentsPage /> : IS_BURN ? <BurnPage /> : <StudioPage />}
       </Suspense>
     )
   }

@@ -29,6 +29,10 @@
     {
       "source": "/agents",
       "destination": "/index.html"
+    },
+    {
+      "source": "/s",
+      "destination": "/index.html"
     }
   ]
 }
