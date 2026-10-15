@@ -1,4 +1,4 @@
-import { agentsSound, aiShieldSound, backupSound, chatSound, crowdSound, shareSound, ghostSound, researchSound, weekSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
+import { agentsSound, aiShieldSound, backupSound, chatSound, crowdSound, shareSound, memorySound, ghostSound, researchSound, weekSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
@@ -20,6 +20,7 @@ import { WEEK_DURATION, drawWeek } from './week'
 import { GHOST_DURATION, drawGhost } from './ghost'
 import { CROWD_DURATION, drawCrowd } from './crowd'
 import { SHARE_DURATION, drawShare } from './share'
+import { MEMORY_DURATION, drawMemory } from './memory'
 
 export interface Film {
   duration: number
@@ -29,6 +30,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  memory: { duration: MEMORY_DURATION, sound: memorySound, draw: drawMemory },
   share: { duration: SHARE_DURATION, sound: shareSound, draw: drawShare },
   crowd: { duration: CROWD_DURATION, sound: crowdSound, draw: drawCrowd },
   ghost: { duration: GHOST_DURATION, sound: ghostSound, draw: drawGhost },

@@ -23,6 +23,7 @@ import { WEEK_CUES, WEEK_DURATION } from './week'
 import { GHOST_CUES, GHOST_DURATION } from './ghost'
 import { CROWD_CUES, CROWD_DURATION } from './crowd'
 import { SHARE_CUES, SHARE_DURATION } from './share'
+import { MEMORY_CUES, MEMORY_DURATION } from './memory'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -542,6 +543,24 @@ export const shareSound: Soundtrack = (ctx, out) => {
   for (let i = 0; i < n; i++) click(ctx, out, K.request + 0.3 + (0.7 * i) / n, 0.08, 31000 + i * 71)
   tick(ctx, out, K.request + 1.5, 1661.22, 0.1)
   hit(ctx, out, K.reader[0] + 0.2, 0.24, 120, 50, 0.3)
+  K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Private Memory promo: the notes appear, typing, a scan with a tick per pick, send, the request lines, the answer, three points. */
+export const memorySound: Soundtrack = (ctx, out) => {
+  const K = MEMORY_CUES
+  pad(ctx, out, 0, MEMORY_DURATION, [1.0, K.wire[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.notes, K.notes + 0.9, 300, 1200, 0.025)
+  const n = 40
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 41000 + i * 67)
+  sweep(ctx, out, K.scan[0], K.scan[1], 900, 2400, 0.03)
+  K.picks.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.11))
+  tick(ctx, out, K.send, 1174.66, 0.12)
+  hit(ctx, out, K.wire[0] + 0.2, 0.26, 130, 55, 0.35)
+  tick(ctx, out, K.stay + 0.3, 987.77, 0.09)
+  hit(ctx, out, K.answer[0] + 0.2, 0.22, 120, 50, 0.3)
   K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
