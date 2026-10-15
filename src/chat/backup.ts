@@ -1,9 +1,11 @@
 import { getImageBlob } from './images'
+import type { MemoryNote } from './memory'
 import type { Conversation } from './store'
 
 /**
- * Encrypted backup: every chat in this browser, its attachments and generated images, and the
- * shield's word list, packed into one file and encrypted here, before it is saved anywhere.
+ * Encrypted backup: every chat in this browser, its attachments and generated images, the
+ * shield's word list and the memory notes, packed into one file and encrypted here, before it is
+ * saved anywhere.
  *
  *   file    = "NULLBAK1" · u32 header length · header (JSON) · ciphertext
  *   key     = Argon2id(passphrase, salt; 64 MiB, 3 passes) → 256-bit AES key
@@ -36,6 +38,8 @@ interface Manifest {
   mode: 'live' | 'demo'
   conversations: Conversation[]
   shieldWords: string[]
+  /** Private Memory notes (backups made before memory existed have none) */
+  memory?: MemoryNote[]
   files: { id: string; type: string; size: number }[]
 }
 
@@ -44,6 +48,7 @@ export interface BackupContents {
   mode: 'live' | 'demo'
   conversations: Conversation[]
   shieldWords: string[]
+  memory: MemoryNote[]
   files: Map<string, Blob>
 }
 
@@ -100,7 +105,7 @@ export function generatePassphrase(): string {
 
 /** Packs and encrypts the chats. */
 export async function makeBackup(
-  input: { conversations: Conversation[]; mode: 'live' | 'demo'; shieldWords: string[] },
+  input: { conversations: Conversation[]; mode: 'live' | 'demo'; shieldWords: string[]; memory: MemoryNote[] },
   passphrase: string,
   onPhase: (p: string) => void = () => {},
 ): Promise<{ blob: Blob; files: number }> {
@@ -116,6 +121,7 @@ export async function makeBackup(
     mode: input.mode,
     conversations: input.conversations,
     shieldWords: input.shieldWords,
+    memory: input.memory,
     files: blobs.map(({ id, blob }) => ({ id, type: blob.type, size: blob.size })),
   }
   const mBytes = enc.encode(JSON.stringify(manifest))
@@ -168,5 +174,12 @@ export async function openBackup(file: Blob, passphrase: string, onPhase: (p: st
     files.set(f.id, new Blob([payload.slice(at, at + f.size)], { type: f.type }))
     at += f.size
   }
-  return { created: manifest.created, mode: manifest.mode, conversations: manifest.conversations ?? [], shieldWords: manifest.shieldWords ?? [], files }
+  return {
+    created: manifest.created,
+    mode: manifest.mode,
+    conversations: manifest.conversations ?? [],
+    shieldWords: manifest.shieldWords ?? [],
+    memory: Array.isArray(manifest.memory) ? manifest.memory : [],
+    files,
+  }
 }

@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { IS_LIVE } from '../config/mode'
 import { BACKUP_EXT, generatePassphrase, makeBackup, MIN_PASSPHRASE, openBackup, storedIds, type BackupContents } from './backup'
+import type { MemoryNote } from './memory'
 import type { Conversation } from './store'
 
 export interface RestoreResult {
@@ -11,6 +12,8 @@ export interface RestoreResult {
   newer: number
   kept: number
   files: number
+  /** memory notes that weren't here yet */
+  notes: number
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -44,6 +47,7 @@ export function BackupDialog({
   onClose,
   conversations,
   shieldWords,
+  memory,
   onRestore,
   initialTab = 'export',
 }: {
@@ -51,6 +55,7 @@ export function BackupDialog({
   onClose: () => void
   conversations: Conversation[]
   shieldWords: string[]
+  memory: MemoryNote[]
   onRestore: (c: BackupContents) => Promise<RestoreResult>
   initialTab?: 'export' | 'import'
 }) {
@@ -93,7 +98,7 @@ export function BackupDialog({
     setError('')
     setDone('')
     try {
-      const { blob } = await makeBackup({ conversations, mode: IS_LIVE ? 'live' : 'demo', shieldWords }, pass, setPhase)
+      const { blob } = await makeBackup({ conversations, mode: IS_LIVE ? 'live' : 'demo', shieldWords, memory }, pass, setPhase)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `null-chats-${today()}${BACKUP_EXT}`
@@ -122,6 +127,7 @@ export function BackupDialog({
         r.newer ? `${r.newer} updated to the newer copy` : '',
         r.kept ? `${r.kept} already here` : '',
         `${r.files} file${r.files === 1 ? '' : 's'} restored`,
+        r.notes ? `${r.notes} memory note${r.notes === 1 ? '' : 's'} added` : '',
       ].filter(Boolean)
       setDone(`${parts.join(' · ')}.${contents.mode !== (IS_LIVE ? 'live' : 'demo') ? ` This backup was made in ${contents.mode} mode.` : ''}`)
       setPass('')
@@ -159,6 +165,7 @@ export function BackupDialog({
             <div className="rounded-lg border border-line-2 bg-bg/40 px-4 py-3 font-mono text-[11.5px] leading-relaxed">
               <div className="text-soft">
                 {conversations.length} chat{conversations.length === 1 ? '' : 's'} · {files} file{files === 1 ? '' : 's'} and image{files === 1 ? '' : 's'} · your shield word list
+                {memory.length ? ` · ${memory.length} memory note${memory.length === 1 ? '' : 's'}` : ''}
               </div>
               <div className="mt-1 text-dim">not included: your private balance (it stays tied to this browser; withdraw first if you switch devices)</div>
             </div>

@@ -91,7 +91,7 @@ const isPunct = (ch: string) => {
 }
 
 /** Whitespace/punctuation split like BERT's BasicTokenizer, with character offsets. */
-function words(text: string): Word[] {
+export function words(text: string): Word[] {
   const out: Word[] = []
   let start = -1
   const close = (i: number) => {
@@ -110,14 +110,14 @@ function words(text: string): Word[] {
   return out
 }
 
-const normalize = (w: string) =>
+export const normalize = (w: string) =>
   w
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{Mn}/gu, '')
 
 /** WordPiece ids for one word ([UNK] if it can't be split). */
-function wordPiece(word: string, vocab: Map<string, number>): number[] {
+export function wordPiece(word: string, vocab: Map<string, number>): number[] {
   const unk = vocab.get('[UNK]') ?? 100
   if (word.length > 100) return [unk]
   const ids: number[] = []

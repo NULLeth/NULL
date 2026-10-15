@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -28,6 +28,8 @@ import { BackupDialog, type RestoreResult } from './BackupDialog'
 import { useCrowd } from './crowd'
 import { ShareDialog, type ShareItem } from './ShareDialog'
 import { CrowdDialog } from './CrowdDialog'
+import { fitLevel, loadMemoryModel, MAX_RECALL, memoryBlock, recall, useMemory, type Recalled } from './memory'
+import { MemoryDialog, type ModelStatus } from './MemoryDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
@@ -125,17 +127,18 @@ async function toWire(msgs: ChatMessage[], side: 'a' | 'b', vision: boolean): Pr
     const src: ChatMessage | AltAnswer = side === 'b' && m.role === 'assistant' && m.alt ? m.alt : m
     const text = src.wire ?? src.content
     if (src.error || (!text && !m.files?.length)) continue
-    if (m.role !== 'user' || !m.files?.length) {
+    const mem = m.role === 'user' && m.memory?.length ? memoryBlock(m.memory.map((n) => n.wire ?? n.text)) : ''
+    if (m.role !== 'user' || (!m.files?.length && !mem)) {
       out.push({ role: m.role, content: text })
       continue
     }
     const docs = await Promise.all(
-      m.files
+      (m.files ?? [])
         .filter((f) => f.kind === 'doc')
         .map(async (f) => (await getText(`${f.id}.wire`)) ?? (await getText(f.id)) ?? `<document name="${docName(f.name)}">\n(no longer stored in this browser)\n</document>`),
     )
-    const body = [...docs, text].filter(Boolean).join('\n\n')
-    const photos = m.files.filter((f) => f.kind === 'photo')
+    const body = [mem, ...docs, text].filter(Boolean).join('\n\n')
+    const photos = (m.files ?? []).filter((f) => f.kind === 'photo')
     if (!photos.length) out.push({ role: 'user', content: body })
     else if (!vision) out.push({ role: 'user', content: `${body}\n\n(${photos.length} photo${photos.length === 1 ? '' : 's'} left out: this model reads text only)`.trim() })
     else {
@@ -259,6 +262,8 @@ function Sidebar({
   autoDays,
   onAutoDays,
   onCrowd,
+  memory,
+  onMemory,
 }: {
   list: Conversation[]
   activeId: string
@@ -270,6 +275,8 @@ function Sidebar({
   autoDays: number
   onAutoDays: (days: number) => void
   onCrowd: () => void
+  memory: { on: boolean; count: number }
+  onMemory: () => void
 }) {
   const now = useNow(30_000)
   return (
@@ -325,6 +332,19 @@ function Sidebar({
             DELETE ALL CHATS
           </button>
         )}
+      </div>
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={onMemory}
+          className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left font-mono text-[10.5px] tracking-[0.12em] text-dim transition-colors hover:border-line-3 hover:text-soft"
+        >
+          <Brain className={`size-3.5 ${memory.on && memory.count ? 'text-eth' : ''}`} />
+          MEMORY
+          <span className={`ml-auto tracking-normal ${memory.on && memory.count ? 'text-eth/80' : 'text-faint'}`}>
+            {!memory.count ? 'in this browser only' : `${memory.count} note${memory.count === 1 ? '' : 's'}${memory.on ? '' : ' · off'}`}
+          </span>
+        </button>
       </div>
       {list.length > 0 && (
         <div className="px-3 pb-2">
@@ -428,6 +448,39 @@ function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; s
 }
 
 /** Above the composer: what the shield will hide in the message being typed. */
+/** The memory notes that will go along with the message being typed; click one to leave it out. */
+function MemoryBar({ list, skip, onToggle, onManage }: { list: Recalled[]; skip: Set<string>; onToggle: (id: string) => void; onManage: () => void }) {
+  const going = list.filter((r) => !skip.has(r.note.id)).length
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[10.5px]">
+      <span className="inline-flex items-center gap-1 tracking-[0.12em] text-eth">
+        <Brain className="size-3.5" />
+        MEMORY
+      </span>
+      <span className="text-dim">{list.length ? `${going} note${going === 1 ? ' goes' : 's go'} along` : 'no note fits, nothing from your memory goes along'}</span>
+      {list.map((r) => {
+        const off = skip.has(r.note.id)
+        return (
+          <button
+            key={r.note.id}
+            type="button"
+            onClick={() => onToggle(r.note.id)}
+            title={off ? 'Stays in this browser. Click to send it along.' : `Fits this message${['', '', ' well', ' strongly'][fitLevel(r.fit)]}. Click to leave it out.`}
+            className={`h-6 max-w-[260px] truncate rounded-md border px-2 transition-colors ${
+              off ? 'border-line-2 text-dim line-through' : 'border-eth/35 bg-eth/[0.08] text-eth hover:border-eth/60'
+            }`}
+          >
+            {r.note.text}
+          </button>
+        )
+      })}
+      <button type="button" onClick={onManage} className="ml-auto text-dim hover:text-soft">
+        manage · up to {MAX_RECALL}
+      </button>
+    </div>
+  )
+}
+
 function ShieldBar({
   hits,
   skip,
@@ -605,15 +658,16 @@ function DocWire({ f }: { f: ChatFile }) {
   )
 }
 
-function UserBubble({ m }: { m: ChatMessage }) {
+function UserBubble({ m, onRemember }: { m: ChatMessage; onRemember?: (text: string) => void }) {
   const [show, setShow] = useState(false)
+  const [showMem, setShowMem] = useState(false)
   const photos = m.files?.filter((f) => f.kind === 'photo') ?? []
   const docs = m.files?.filter((f) => f.kind === 'doc') ?? []
   const cleaned = [...new Set(photos.flatMap((p) => p.removed ?? []).map((r) => r.replace(/\s*\(.*$/, '')))]
   const faces = photos.reduce((n, p) => n + (p.faces ?? 0), 0)
   const covered = photos.reduce((n, p) => n + (p.covered ?? 0), 0)
   return (
-    <div className="flex flex-col items-end">
+    <div className="group/msg flex flex-col items-end">
       {!!m.files?.length && (
         <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
           {photos.map((f) => (
@@ -652,6 +706,33 @@ function UserBubble({ m }: { m: ChatMessage }) {
             </>
           )}
         </div>
+      )}
+      {!!m.memory?.length && (
+        <div className="mt-1.5 flex w-full max-w-[85%] flex-col items-end gap-1.5">
+          <Tooltip content="Your browser picked these notes from your memory for this message. The rest of your memory stayed here.">
+            <button type="button" onClick={() => setShowMem((s) => !s)} className="inline-flex items-center gap-1 font-mono text-[10.5px] text-eth/85 hover:text-eth">
+              <Brain className="size-3" />
+              {m.memory.length} note{m.memory.length === 1 ? '' : 's'} from your memory went along · {showMem ? 'hide' : 'show'}
+            </button>
+          </Tooltip>
+          {showMem && (
+            <div className="space-y-1 rounded-lg border border-eth/20 px-3 py-2 font-mono text-[12px] leading-relaxed text-muted">
+              {m.memory.map((n) => (
+                <div key={n.id}>- {n.wire ?? n.text}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {onRemember && m.content && (
+        <button
+          type="button"
+          onClick={() => onRemember(m.content)}
+          className="mt-1 inline-flex items-center gap-1 font-mono text-[10.5px] text-faint opacity-0 transition-opacity hover:text-eth focus:opacity-100 group-hover/msg:opacity-100"
+        >
+          <Brain className="size-3" />
+          remember
+        </button>
       )}
     </div>
   )
@@ -863,6 +944,12 @@ function EmptyState({
         <Mic className="size-3" />
         Talk instead of typing: Whisper turns speech into text in your browser, your voice is never sent
       </p>
+      {!image && !ghost && (
+        <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
+          <Brain className="size-3" />
+          Private Memory: notes you save stay in this browser, only the ones that fit a message go along
+        </p>
+      )}
     </div>
   )
 }
@@ -1058,19 +1145,22 @@ function Messages({
   streamingId,
   onRetry,
   onShare,
+  onRemember,
 }: {
   conv: Conversation
   phase: string
   streamingId: string | null
   onRetry: () => void
   onShare: (item: ShareItem) => void
+  /** not in ghost chats: they never add to memory */
+  onRemember?: (text: string) => void
 }) {
   const wide = conv.messages.some((m) => m.alt)
   return (
     <div className={`mx-auto w-full ${wide ? 'max-w-[1120px]' : 'max-w-[780px]'} space-y-7 px-4 py-8 sm:px-6`}>
       {conv.messages.map((m, i) =>
         m.role === 'user' ? (
-          <UserBubble key={m.id} m={m} />
+          <UserBubble key={m.id} m={m} onRemember={onRemember} />
         ) : m.alt ? (
           <CompareRow key={m.id} m={m} phase={phase} streaming={streamingId === m.id} onRetry={i === conv.messages.length - 1 ? onRetry : undefined} />
         ) : (
@@ -1194,6 +1284,12 @@ export function ChatPage() {
   const [autoDays, setAutoDays] = useState(loadAutoDelete)
   const [crowdOpen, setCrowdOpen] = useState(false)
   const [shareItem, setShareItem] = useState<ShareItem | null>(null)
+  const memory = useMemory()
+  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [memoryPrefill, setMemoryPrefill] = useState('')
+  const [memModel, setMemModel] = useState<ModelStatus>({ status: 'off', progress: 0 })
+  const [memSkip, setMemSkip] = useState<Set<string>>(() => new Set())
+  const [memFound, setMemFound] = useState<{ text: string; list: Recalled[] }>({ text: '', list: [] })
   const fileInput = useRef<HTMLInputElement>(null)
   const [phase, setPhase] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
@@ -1255,6 +1351,43 @@ export function ChatPage() {
     const fromAi = new Set(aiHits.hits)
     return { hits: merged, aiKeys: new Set(merged.filter((h) => fromAi.has(h)).map((h) => `${h.start}:${h.end}`)) }
   }, [input, shieldCfg, aiCurrent, aiHits])
+
+  // Private Memory: load the in-browser model once there are notes, then pick notes for what is typed
+  const memWanted = memory.on && memory.notes.length > 0
+  useEffect(() => {
+    if (!memWanted) return
+    let alive = true
+    setMemModel((s) => (s.status === 'ready' ? s : { status: 'loading', progress: 0 }))
+    loadMemoryModel((p) => alive && setMemModel({ status: 'loading', progress: p }))
+      .then(() => alive && setMemModel({ status: 'ready', progress: 1 }))
+      .catch(() => alive && setMemModel({ status: 'error', progress: 0 }))
+    return () => {
+      alive = false
+    }
+  }, [memWanted])
+  /** memory is left out of web search, research and images, so a note never becomes a search query */
+  const memApplies = memWanted && memModel.status === 'ready' && !conv.image && !conv.web && !conv.research
+  const memUsed = useMemo(() => new Set(conv.messages.flatMap((m) => m.memory?.map((n) => n.id) ?? [])), [conv.messages])
+  const memCandidates = useMemo(() => memory.notes.filter((n) => !memUsed.has(n.id)), [memory.notes, memUsed])
+  useEffect(() => {
+    if (!memApplies || !input.trim()) return
+    let alive = true
+    const t = setTimeout(() => {
+      void recall(input, memCandidates)
+        .then((list) => alive && setMemFound({ text: input, list }))
+        .catch(() => {})
+    }, 250)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [input, memApplies, memCandidates])
+  const memPreview = memApplies && input.trim() && memFound.text === input ? memFound.list : null
+
+  const rememberText = useCallback((text: string) => {
+    setMemoryPrefill(text)
+    setMemoryOpen(true)
+  }, [])
 
   // attached documents: what the shield will hide in each (the AI pass runs once per file)
   const [docAi, setDocAi] = useState<Record<string, ShieldHit[]>>({})
@@ -1565,11 +1698,29 @@ export function ChatPage() {
         stored.push({ id, kind: 'doc', name: f.name, pages: f.pages, chars: f.text.length, truncated: f.truncated, removed: f.removed, shielded })
       }
       if (hidden) extra = { ...extra, shielded: hidden }
+      // Private Memory: the notes that fit this message, picked here; the rest never leave the browser
+      if (memApplies && content) {
+        const picked = (await recall(content, memCandidates).catch(() => [])).filter((r) => !memSkip.has(r.note.id))
+        const notes: NonNullable<ChatMessage['memory']> = []
+        for (const r of picked) {
+          let wire: string | undefined
+          if (shieldCfg.on) {
+            let found = detect(r.note.text, shieldCfg.words)
+            if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(r.note.text).catch(() => []))
+            const s = shield(r.note.text, found, map, skip)
+            map = s.map
+            if (s.used.length) wire = s.text
+          }
+          notes.push({ id: r.note.id, text: r.note.text, ...(wire ? { wire } : {}) })
+        }
+        if (notes.length) extra = { ...extra, memory: notes }
+      }
       const user = newMessage('user', content, { ...extra, ...(stored.length ? { files: stored } : {}) })
       const base = conv.messages.length ? conv : { ...conv, title: titleFrom(content || stored[0]?.name || '') }
       const next = { ...base, shieldMap: map, messages: [...base.messages, user], updatedAt: Date.now() }
       setInput('')
       setSkip(new Set())
+      setMemSkip(new Set())
       setVoiceNote(null)
       if (stored.length) {
         setAttached([])
@@ -1705,7 +1856,8 @@ export function ChatPage() {
     }
     merge(c.conversations)
     if (c.shieldWords.length) setShieldCfg((s) => ({ ...s, words: [...new Set([...s.words, ...c.shieldWords])] }))
-    return { added, newer, kept, files }
+    const notes = memory.merge(c.memory)
+    return { added, newer, kept, files, notes }
   }
 
   const sidebar = (
@@ -1735,6 +1887,12 @@ export function ChatPage() {
       onCrowd={() => {
         setDrawer(false)
         setCrowdOpen(true)
+      }}
+      memory={{ on: memory.on, count: memory.notes.length }}
+      onMemory={() => {
+        setDrawer(false)
+        setMemoryPrefill('')
+        setMemoryOpen(true)
       }}
     />
   )
@@ -1885,7 +2043,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -1970,6 +2128,21 @@ export function ChatPage() {
                 onCover={(key) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, cover: a.cover === false } : a)))}
                 warn={fileWarn}
               />}
+            {memPreview && (
+              <MemoryBar
+                list={memPreview}
+                skip={memSkip}
+                onToggle={(id) =>
+                  setMemSkip((s) => {
+                    const n = new Set(s)
+                    if (n.has(id)) n.delete(id)
+                    else n.add(id)
+                    return n
+                  })
+                }
+                onManage={() => rememberText('')}
+              />
+            )}
             {shieldCfg.on && (input.trim() || fileHits.length > 0) && (
               <ShieldBar
                 files={fileHits}
@@ -2191,12 +2364,25 @@ export function ChatPage() {
       </main>
       <CrowdDialog open={crowdOpen} onClose={() => setCrowdOpen(false)} />
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
+      <MemoryDialog
+        open={memoryOpen}
+        onClose={() => setMemoryOpen(false)}
+        on={memory.on}
+        notes={memory.notes}
+        model={memModel}
+        prefill={memoryPrefill}
+        onOn={memory.setOn}
+        onAdd={memory.add}
+        onRemove={memory.remove}
+        onClear={memory.clear}
+      />
       <BackupDialog
         open={backup !== null}
         initialTab={backup ?? 'export'}
         onClose={() => setBackup(null)}
         conversations={list.filter((c) => c.messages.length && !c.ghost)}
         shieldWords={shieldCfg.words}
+        memory={memory.notes}
         onRestore={restoreBackup}
       />
     </div>

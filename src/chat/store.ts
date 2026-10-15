@@ -66,6 +66,8 @@ export interface ChatMessage {
   files?: ChatFile[]
   /** Private Deep Research: the searches behind this report */
   research?: { steps: ResearchStep[] }
+  /** Private Memory: the notes picked for this message (wire: as the model saw them) */
+  memory?: { id: string; text: string; wire?: string }[]
 }
 
 export interface Conversation {

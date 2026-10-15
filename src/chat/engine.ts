@@ -194,7 +194,14 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   hooks.onPhase('')
   if (hooks.web) hooks.onSources?.(cannedSearch(last).filter((h) => !h.url.startsWith('nullzk.com')).map((h) => ({ url: `https://${h.url}`, title: h.title })))
   const tags = [...new Set(last.match(/\[[A-Z]+_\d+\]/g) ?? [])]
-  const text = last.includes('<document ') || photos ? filesDemo(last, photos, tags.length) : hooks.shield && tags.length ? shieldDemo(tags) : cannedChat(last, model)
+  const text =
+    last.includes('<document ') || photos
+      ? filesDemo(last, photos, tags.length)
+      : last.includes('<memory>')
+        ? memoryDemo(last)
+        : hooks.shield && tags.length
+          ? shieldDemo(tags)
+          : cannedChat(last, model)
   for (let i = 0; i < text.length; ) {
     if (hooks.signal?.aborted) return
     const n = 3 + Math.floor(Math.random() * 5)
@@ -221,6 +228,19 @@ function filesDemo(last: string, photos: number, tags: number): string {
   if (tags) lines.push(`- **${tags} placeholder${tags === 1 ? '' : 's'}** such as [NAME_1] in place of personal details`)
   lines.push('', 'The files themselves never leave this browser. Only the text and the cleaned photos would be sent, and only for this answer.')
   return lines.join('\n')
+}
+
+/** Demo answer when memory notes went along: says plainly which notes the model would get. */
+function memoryDemo(last: string): string {
+  const block = last.match(/<memory>\n[^\n]*\n([\s\S]*?)\n<\/memory>/)
+  const notes = block ? block[1].split('\n').map((l) => l.replace(/^- /, '')) : []
+  return [
+    '**Demo answer.** In live mode the model you picked answers with your notes in mind. Your browser picked these for this message, and only these went along:',
+    '',
+    ...notes.map((n) => `- ${n}`),
+    '',
+    'The rest of your memory stayed in this browser.',
+  ].join('\n')
 }
 
 /** Demo answer for a shielded prompt: written with the placeholders only, like a real model would. */
