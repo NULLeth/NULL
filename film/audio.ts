@@ -24,6 +24,7 @@ import { GHOST_CUES, GHOST_DURATION } from './ghost'
 import { CROWD_CUES, CROWD_DURATION } from './crowd'
 import { SHARE_CUES, SHARE_DURATION } from './share'
 import { MEMORY_CUES, MEMORY_DURATION } from './memory'
+import { PARANOID_CUES, PARANOID_DURATION } from './paranoid'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -561,6 +562,26 @@ export const memorySound: Soundtrack = (ctx, out) => {
   hit(ctx, out, K.wire[0] + 0.2, 0.26, 130, 55, 0.35)
   tick(ctx, out, K.stay + 0.3, 987.77, 0.09)
   hit(ctx, out, K.answer[0] + 0.2, 0.22, 120, 50, 0.3)
+  K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Paranoid mode promo: the switch, a tick per rule, the Tor check, typing, send, a soft pulse per second of the delay, the answer, the guards, three points. */
+export const paranoidSound: Soundtrack = (ctx, out) => {
+  const K = PARANOID_CUES
+  pad(ctx, out, 0, PARANOID_DURATION, [1.0, K.guard[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  tick(ctx, out, K.click, 1174.66, 0.12)
+  K.rules.forEach((at, i) => tick(ctx, out, at, [987.77, 1108.73, 1174.66, 1318.51, 1479.98][i], 0.08))
+  sweep(ctx, out, K.torCheck, K.torOk, 500, 1800, 0.03)
+  tick(ctx, out, K.torOk, 1661.22, 0.11)
+  const n = 44
+  for (let i = 0; i < n; i++) click(ctx, out, K.typeStart + ((K.typeEnd - K.typeStart) * i) / n, 0.08, 51000 + i * 61)
+  tick(ctx, out, K.send, 1318.51, 0.12)
+  for (let s = K.delay[0]; s < K.delay[1]; s += 1) hit(ctx, out, s, 0.12, 110, 60, 0.12)
+  tick(ctx, out, K.answer, 1479.98, 0.11)
+  hit(ctx, out, K.blocked, 0.24, 120, 50, 0.3)
+  sweep(ctx, out, K.route + 0.3, K.route + 1.4, 400, 2200, 0.03)
   K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
