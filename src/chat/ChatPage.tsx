@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -12,10 +12,10 @@ import { WalletButton } from '../components/WalletButton'
 import { IS_LIVE, LIVE } from '../config/mode'
 import { ago, fmtEth, fmtUsd } from '../lib/format'
 import { useNow } from '../lib/hooks'
-import { randHex, randId } from '../lib/random'
+import { randHex, randId, sleep } from '../lib/random'
 import { errorMessage } from '../live/client'
 import type { Source } from '../live/stream'
-import { useConnection } from '../live/connection'
+import { checkConnection, recheckConnection, useConnection, type Connection } from '../live/connection'
 import { useLive } from '../live/LiveProvider'
 import { useAccount } from '../live/useAccount'
 import { useActions } from '../state/actions'
@@ -309,11 +309,11 @@ function Sidebar({
           >
             <button type="button" onClick={() => onSelect(c.id)} className="min-w-0 flex-1 px-3 py-2 text-left">
               <div className={`flex items-center gap-1.5 truncate text-[13px] ${c.id === activeId ? 'text-fg' : 'text-soft'}`}>
-                {c.ghost && <Ghost className="size-3.5 shrink-0 text-eth" />}
+                {c.paranoid ? <ShieldAlert className="size-3.5 shrink-0 text-warn" /> : c.ghost && <Ghost className="size-3.5 shrink-0 text-eth" />}
                 <span className="truncate">{c.title}</span>
               </div>
               <div className="mt-0.5 truncate font-mono text-[10.5px] text-dim">
-                {c.ghost ? 'ghost · erased when you leave it' : c.image ? modelLabel(c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.compare ? `${modelLabel(c.model)} vs ${modelLabel(c.model2 ?? secondModel(c.model))}` : modelLabel(c.model)} ·{' '}
+                {c.paranoid ? 'paranoid · Tor only · erased when you leave it' : c.ghost ? 'ghost · erased when you leave it' : c.image ? modelLabel(c.imageModel ?? DEFAULT_IMAGE_MODEL) : c.compare ? `${modelLabel(c.model)} vs ${modelLabel(c.model2 ?? secondModel(c.model))}` : modelLabel(c.model)} ·{' '}
                 {ago(c.updatedAt, now)}
               </div>
             </button>
@@ -448,6 +448,57 @@ function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; s
 }
 
 /** Above the composer: what the shield will hide in the message being typed. */
+/** paranoid mode: no detail can be clicked to "send as written" */
+const NO_SKIP: Set<string> = new Set()
+
+const PARANOID_RULES = [
+  'Tor only: NULL checks before every message and sends nothing if you’re not on Tor',
+  'Nothing saved, not even in this browser',
+  'AI Shield always on: names, places, emails and numbers become placeholders',
+  'A random 2–8 s delay, so the request doesn’t leave the moment you hit send',
+  'Memory, web search, research, images and files are off',
+]
+
+const torProblem = (c: Connection) =>
+  c.status === 'error'
+    ? 'Couldn’t check for Tor, so nothing was sent. Try again in a moment.'
+    : 'You’re not on Tor, so nothing was sent. Open NULL in Tor Browser to use paranoid mode.'
+
+/** Paranoid mode, above the composer: each guarantee and whether it holds right now. */
+function ParanoidBar({ note, ai }: { note: string | null; ai: AiStatus }) {
+  const c = useConnection()
+  const { open } = useUi()
+  const mark = (state: 'ok' | 'wait' | 'bad', label: string) => (
+    <span className={`inline-flex items-center gap-1 ${state === 'ok' ? 'text-ok/90' : state === 'wait' ? 'text-dim' : 'text-bad/90'}`}>
+      {state === 'ok' ? '✓' : state === 'wait' ? '…' : '✗'} {label}
+    </span>
+  )
+  return (
+    <div className="mb-2 rounded-lg border border-dashed border-warn/35 bg-warn/[0.03] px-3 py-2 font-mono text-[10.5px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="inline-flex items-center gap-1 tracking-[0.12em] text-warn">
+          <ShieldAlert className="size-3.5" />
+          PARANOID
+        </span>
+        {c.status === 'done' && c.tor ? (
+          mark('ok', 'Tor')
+        ) : c.status === 'done' || c.status === 'error' ? (
+          <button type="button" onClick={() => open({ name: 'tor' })} className="text-bad/90 underline-offset-2 hover:underline">
+            ✗ {c.status === 'error' ? 'Tor check failed' : 'not on Tor'} · how to
+          </button>
+        ) : (
+          mark('wait', 'checking Tor')
+        )}
+        {mark('ok', 'nothing saved')}
+        {ai.status === 'ready' ? mark('ok', 'AI Shield') : ai.status === 'error' ? mark('bad', 'AI Shield unavailable') : mark('wait', `AI Shield ${Math.round(ai.progress * 100)}%`)}
+        {mark('ok', 'random delay 2–8 s')}
+        {mark('ok', 'memory, web, files off')}
+      </div>
+      {note && <p className="mt-1.5 text-warn/90">{note}</p>}
+    </div>
+  )
+}
+
 /** The memory notes that will go along with the message being typed; click one to leave it out. */
 function MemoryBar({ list, skip, onToggle, onManage }: { list: Recalled[]; skip: Set<string>; onToggle: (id: string) => void; onManage: () => void }) {
   const going = list.filter((r) => !skip.has(r.note.id)).length
@@ -870,6 +921,7 @@ function EmptyState({
   compare,
   research,
   ghost,
+  paranoid,
 }: {
   onPick: (s: string) => void
   disabled: boolean
@@ -879,10 +931,29 @@ function EmptyState({
   compare: boolean
   research: boolean
   ghost: boolean
+  paranoid: boolean
 }) {
   return (
-    <div className="mx-auto flex max-w-[640px] flex-col items-center px-4 pt-[12vh] text-center">
-      {ghost ? (
+    <div className={`mx-auto flex max-w-[640px] flex-col items-center px-4 text-center ${paranoid ? 'pt-[5vh]' : 'pt-[12vh]'}`}>
+      {paranoid ? (
+        <div className="mb-6 w-full max-w-[580px] rounded-xl border border-dashed border-warn/40 bg-warn/[0.04] px-5 py-4 text-left">
+          <div className="flex items-center justify-center gap-2 font-mono text-[11px] tracking-[0.16em] text-warn">
+            <ShieldAlert className="size-4" />
+            PARANOID MODE
+          </div>
+          <ul className="mt-3 space-y-1.5 text-[13.5px] leading-relaxed text-soft">
+            {PARANOID_RULES.map((r) => (
+              <li key={r} className="flex gap-2">
+                <span className="text-ok">✓</span>
+                <span>{r}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 font-mono text-[10.5px] leading-relaxed text-dim">
+            Not a mixnet: Tor hides your IP, not every timing pattern, and the model still reads the shielded text.
+          </p>
+        </div>
+      ) : ghost ? (
         <div className="mb-6 w-full max-w-[520px] rounded-xl border border-dashed border-eth/40 bg-eth/[0.05] px-5 py-4">
           <div className="flex items-center justify-center gap-2 font-mono text-[11px] tracking-[0.16em] text-eth">
             <Ghost className="size-4" />
@@ -928,22 +999,24 @@ function EmptyState({
           ? `${IMAGE_MODELS.length} image models · Nano Banana 2 by default · about ${Math.round(IMAGE_MODELS[0].approxUsd * 100)}¢ per image`
           : `${MODELS.length - 1} models · Claude, GPT, Gemini, Grok, DeepSeek, Kimi, Llama and more · switch any time at the top`}
       </p>
-      {shieldOn && (
+      {shieldOn && !paranoid && (
         <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-ok/80">
           <ShieldCheck className="size-3" />
           Prompt Shield is on: names, emails, numbers and addresses are swapped for placeholders before sending
         </p>
       )}
-      {!image && (
+      {!image && !paranoid && (
         <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
           <Paperclip className="size-3" />
           Attach PDFs, text files or photos: opened in your browser, photos lose their GPS location, faces and personal details are hidden
         </p>
       )}
-      <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
-        <Mic className="size-3" />
-        Talk instead of typing: Whisper turns speech into text in your browser, your voice is never sent
-      </p>
+      {!paranoid && (
+        <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
+          <Mic className="size-3" />
+          Talk instead of typing: Whisper turns speech into text in your browser, your voice is never sent
+        </p>
+      )}
       {!image && !ghost && (
         <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10.5px] tracking-[0.06em] text-dim">
           <Brain className="size-3" />
@@ -1212,6 +1285,11 @@ function Messages({
                       image
                     </span>
                   )}
+                  {m.delayMs != null && (
+                    <Tooltip content="Paranoid mode held this request back for a random moment, so it didn't leave the instant you hit send.">
+                      <span className="text-warn/80">delayed {(m.delayMs / 1000).toFixed(1)}s</span>
+                    </Tooltip>
+                  )}
                   {m.ms != null && <span>{(m.ms / 1000).toFixed(1)}s</span>}
                   {m.costUsd != null && (
                     <Tooltip content={COST_TIP}>
@@ -1302,6 +1380,9 @@ export function ChatPage() {
   const textarea = useRef<HTMLTextAreaElement>(null)
 
   const conv = useMemo(() => list.find((c) => c.id === activeId) ?? draft, [list, activeId, draft])
+  /** paranoid mode forces the shield on, whatever the switch says */
+  const shieldOn = shieldCfg.on || !!conv.paranoid
+  const [paranoidNote, setParanoidNote] = useState<string | null>(null)
   const sending = streamingId !== null
   const canSend = IS_LIVE ? account.status === 'ready' && account.hasNote && account.balanceEth > 0 : true
 
@@ -1320,7 +1401,7 @@ export function ChatPage() {
   // AI Shield: load the in-browser model when it is switched on, then run it on what is typed
   const [ai, setAi] = useState<AiStatus>({ status: 'off', progress: 0 })
   const [aiHits, setAiHits] = useState<{ text: string; hits: ShieldHit[] }>({ text: '', hits: [] })
-  const aiWanted = shieldCfg.on && shieldCfg.ai
+  const aiWanted = (shieldOn && shieldCfg.ai) || !!conv.paranoid
   useEffect(() => {
     if (!aiWanted) return
     let alive = true
@@ -1343,14 +1424,14 @@ export function ChatPage() {
   }, [input, aiWanted, ai.status])
   const aiCurrent = aiWanted && ai.status === 'ready' && aiHits.text === input
   const { hits, aiKeys } = useMemo(() => {
-    if (!shieldCfg.on || !input.trim()) return { hits: [], aiKeys: new Set<string>() }
+    if (!shieldOn || !input.trim()) return { hits: [], aiKeys: new Set<string>() }
     const found = detect(input, shieldCfg.words)
     if (!aiCurrent) return { hits: found, aiKeys: new Set<string>() }
     // pattern hits win ties, so only what the patterns missed is marked "AI"
     const merged = mergeHits(found, aiHits.hits)
     const fromAi = new Set(aiHits.hits)
     return { hits: merged, aiKeys: new Set(merged.filter((h) => fromAi.has(h)).map((h) => `${h.start}:${h.end}`)) }
-  }, [input, shieldCfg, aiCurrent, aiHits])
+  }, [input, shieldCfg, shieldOn, aiCurrent, aiHits])
 
   // Private Memory: load the in-browser model once there are notes, then pick notes for what is typed
   const memWanted = memory.on && memory.notes.length > 0
@@ -1366,7 +1447,7 @@ export function ChatPage() {
     }
   }, [memWanted])
   /** memory is left out of web search, research and images, so a note never becomes a search query */
-  const memApplies = memWanted && memModel.status === 'ready' && !conv.image && !conv.web && !conv.research
+  const memApplies = memWanted && memModel.status === 'ready' && !conv.image && !conv.web && !conv.research && !conv.paranoid
   const memUsed = useMemo(() => new Set(conv.messages.flatMap((m) => m.memory?.map((n) => n.id) ?? [])), [conv.messages])
   const memCandidates = useMemo(() => memory.notes.filter((n) => !memUsed.has(n.id)), [memory.notes, memUsed])
   useEffect(() => {
@@ -1403,7 +1484,7 @@ export function ChatPage() {
   }, [attached, aiWanted, ai.status, docAi])
   const fileHits = useMemo(
     () =>
-      shieldCfg.on
+      shieldOn
         ? attached.flatMap((a) => {
             if (a.file?.kind !== 'doc') return []
             let found = detect(docBlock(a.file), shieldCfg.words)
@@ -1415,6 +1496,7 @@ export function ChatPage() {
   )
 
   const addFiles = (list: FileList | File[]) => {
+    if (conv.paranoid) return
     const incoming = [...list]
     if (!incoming.length) return
     const room = Math.max(0, MAX_FILES - attachedRef.current.length)
@@ -1424,7 +1506,7 @@ export function ChatPage() {
       name: f.name || 'pasted image',
       kind: fileKind(f) ?? 'doc',
       status: 'reading',
-      ...(shieldCfg.on ? {} : { cover: false }),
+      ...(shieldOn ? {} : { cover: false }),
     }))
     const readOpts = { words: shieldCfg.words, ai: aiWanted && ai.status === 'ready' ? detectAi : undefined }
     if (incoming.length > take.length)
@@ -1515,7 +1597,7 @@ export function ChatPage() {
       setPhase('')
       const ctrl = new AbortController()
       abort.current = ctrl
-      const t0 = performance.now()
+      let t0 = performance.now()
       let text = ''
       let sources: Source[] = []
       const shielded = !!target.shieldMap && Object.keys(target.shieldMap).length > 0
@@ -1564,6 +1646,27 @@ export function ChatPage() {
         onCost: (usd: number) => patch({ costUsd: usd }),
       }
       try {
+        if (target.paranoid) {
+          // Tor only: checked again right before the request
+          const c = await recheckConnection()
+          if (c.status !== 'done' || !c.tor) {
+            patch({ error: torProblem(c) })
+            return
+          }
+          // a random 2–8 s wait, so the request doesn't leave the moment you hit send
+          const delayMs = 2000 + (crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32) * 6000
+          const until = Date.now() + delayMs
+          while (Date.now() < until) {
+            if (ctrl.signal.aborted) {
+              patch({ error: 'Stopped during the random delay. Nothing was sent.' })
+              return
+            }
+            setPhase(`Random delay · sending in ${Math.ceil((until - Date.now()) / 1000)}s`)
+            await sleep(Math.min(250, until - Date.now()))
+          }
+          patch({ delayMs: Math.round(delayMs) })
+          t0 = performance.now()
+        }
         if (target.image) {
           const lastUser = [...target.messages].reverse().find((m) => m.role === 'user')
           const prompt = lastUser?.wire ?? lastUser?.content ?? ''
@@ -1652,10 +1755,24 @@ export function ChatPage() {
 
   const send = async (text: string) => {
     const content = text.trim()
+    const skipNow = conv.paranoid ? NO_SKIP : skip
     const files = conv.image ? [] : readyFiles
     if ((!content && !files.length) || sending || preparing || !canSend || stillReading || blind.length) return
     setPreparing(true)
     try {
+      // paranoid mode: nothing leaves unless this browser is on Tor and AI Shield is ready
+      if (conv.paranoid) {
+        const c = await recheckConnection()
+        if (c.status !== 'done' || !c.tor) {
+          setParanoidNote(torProblem(c))
+          return
+        }
+        if (ai.status !== 'ready') {
+          setParanoidNote(ai.status === 'error' ? 'AI Shield could not load, so nothing was sent. Reload the page to try again.' : 'AI Shield is still loading, so nothing was sent yet.')
+          return
+        }
+        setParanoidNote(null)
+      }
       // Prompt Shield: swap personal details for placeholders before anything leaves the browser
       let map = conv.shieldMap ?? {}
       let extra: Partial<ChatMessage> = {}
@@ -1663,12 +1780,12 @@ export function ChatPage() {
       const shieldText = async (s: string) => {
         let found = detect(s, shieldCfg.words)
         if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(s).catch(() => []))
-        const r = shield(s, found, map, skip)
+        const r = shield(s, found, map, skipNow)
         map = r.map
         hidden += r.used.length
         return r
       }
-      if (shieldCfg.on && content) {
+      if (shieldOn && content) {
         const s = await shieldText(content)
         if (s.used.length) extra = { wire: s.text }
       }
@@ -1688,7 +1805,7 @@ export function ChatPage() {
         const block = docBlock(f)
         await putText(id, block)
         let shielded = 0
-        if (shieldCfg.on) {
+        if (shieldOn) {
           const s = await shieldText(block)
           if (s.used.length) {
             await putText(`${id}.wire`, s.text)
@@ -1704,10 +1821,10 @@ export function ChatPage() {
         const notes: NonNullable<ChatMessage['memory']> = []
         for (const r of picked) {
           let wire: string | undefined
-          if (shieldCfg.on) {
+          if (shieldOn) {
             let found = detect(r.note.text, shieldCfg.words)
             if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(r.note.text).catch(() => []))
-            const s = shield(r.note.text, found, map, skip)
+            const s = shield(r.note.text, found, map, skipNow)
             map = s.map
             if (s.used.length) wire = s.text
           }
@@ -1757,6 +1874,18 @@ export function ChatPage() {
     setDraft({ ...newConversation(conv.model), ghost: true })
     setActiveId('')
     setDrawer(false)
+    setTimeout(() => textarea.current?.focus(), 50)
+  }
+
+  const startParanoid = () => {
+    if (sending) return
+    leaveGhost()
+    setDraft({ ...newConversation(conv.model), ghost: true, paranoid: true })
+    setAttached([])
+    setParanoidNote(null)
+    setActiveId('')
+    setDrawer(false)
+    void checkConnection()
     setTimeout(() => textarea.current?.focus(), 50)
   }
 
@@ -1811,22 +1940,26 @@ export function ChatPage() {
   const setModel = (model: string) => setConv(conv.image ? { imageModel: model } : { model })
 
   const toggleWeb = () => {
+    if (conv.paranoid) return
     setConv({ web: !conv.web, image: false, research: false })
     textarea.current?.focus()
   }
 
   const toggleImage = () => {
+    if (conv.paranoid) return
     if (!conv.image) setAttached([])
     setConv({ image: !conv.image, web: false, compare: false, research: false })
     textarea.current?.focus()
   }
 
   const toggleCompare = () => {
+    if (conv.paranoid) return
     setConv({ compare: !conv.compare, image: false, research: false, model2: conv.model2 ?? secondModel(conv.model) })
     textarea.current?.focus()
   }
 
   const toggleResearch = () => {
+    if (conv.paranoid) return
     if (!conv.research) setAttached([])
     setConv({ research: !conv.research, web: false, image: false, compare: false })
     textarea.current?.focus()
@@ -2015,6 +2148,28 @@ export function ChatPage() {
           <div className="ml-auto flex items-center gap-2">
             <Tooltip
               content={
+                conv.paranoid
+                  ? 'You are in paranoid mode. Click to leave it; the chat is erased.'
+                  : 'Paranoid mode: Tor only, nothing saved, AI Shield always on, a random delay before sending, memory, web and files off.'
+              }
+            >
+              <button
+                type="button"
+                onClick={conv.paranoid ? startNew : startParanoid}
+                disabled={sending}
+                aria-pressed={!!conv.paranoid}
+                aria-label={conv.paranoid ? 'Leave paranoid mode' : 'Start a paranoid chat'}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] tracking-[0.14em] transition-colors disabled:opacity-50 ${
+                  conv.paranoid ? 'border-dashed border-warn/50 bg-warn/10 text-warn' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                }`}
+              >
+                <ShieldAlert className="size-3.5" />
+                <span className="hidden sm:inline">{conv.paranoid ? 'PARANOID · LEAVE' : 'PARANOID'}</span>
+              </button>
+            </Tooltip>
+            {!conv.paranoid && (
+            <Tooltip
+              content={
                 conv.ghost
                   ? 'You are in a ghost chat: nothing is saved, not even in this browser. Click to leave it; it is erased.'
                   : 'Start a ghost chat: nothing is saved, files stay in memory only, and it is erased when you leave it.'
@@ -2034,6 +2189,7 @@ export function ChatPage() {
                 <span className="hidden sm:inline">{conv.ghost ? 'GHOST · LEAVE' : 'GHOST'}</span>
               </button>
             </Tooltip>
+            )}
             <a href={IS_LIVE ? '/chat?demo' : '/chat'} className={`hidden rounded-full border px-2.5 py-1 font-mono text-[10px] tracking-[0.14em] sm:inline-flex ${IS_LIVE ? 'border-ok/30 text-ok/90' : 'border-warn/30 text-warn/90'}`}>
               {IS_LIVE ? 'LIVE' : 'DEMO'}
             </a>
@@ -2043,7 +2199,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldCfg.on} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldOn} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} paranoid={!!conv.paranoid} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -2097,7 +2253,8 @@ export function ChatPage() {
                 </span>
               </div>
             )}
-            {conv.ghost && conv.messages.length > 0 && (
+            {conv.paranoid && <ParanoidBar note={paranoidNote} ai={ai} />}
+            {conv.ghost && !conv.paranoid && conv.messages.length > 0 && (
               <div className="mb-2 flex items-center gap-1.5 font-mono text-[10.5px] text-eth/90">
                 <Ghost className="size-3.5" />
                 GHOST CHAT · not saved anywhere · leaving it or closing the tab erases it
@@ -2143,12 +2300,13 @@ export function ChatPage() {
                 onManage={() => rememberText('')}
               />
             )}
-            {shieldCfg.on && (input.trim() || fileHits.length > 0) && (
+            {shieldOn && (input.trim() || fileHits.length > 0) && (
               <ShieldBar
                 files={fileHits}
                 hits={hits}
-                skip={skip}
+                skip={conv.paranoid ? NO_SKIP : skip}
                 onToggle={(v) =>
+                  !conv.paranoid &&
                   setSkip((s) => {
                     const n = new Set(s)
                     if (n.has(v)) n.delete(v)
@@ -2200,7 +2358,7 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={() => fileInput.current?.click()}
-                  disabled={sending || conv.image || attached.length >= MAX_FILES}
+                  disabled={sending || conv.image || !!conv.paranoid || attached.length >= MAX_FILES}
                   aria-label="Attach files"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
                     attached.length ? 'border-ok/35 bg-ok/[0.08] text-ok/90' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
@@ -2214,7 +2372,7 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={toggleWeb}
-                  disabled={sending}
+                  disabled={sending || !!conv.paranoid}
                   aria-pressed={!!conv.web}
                   aria-label="Web search"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
@@ -2235,7 +2393,7 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={toggleResearch}
-                  disabled={sending}
+                  disabled={sending || !!conv.paranoid}
                   aria-pressed={!!conv.research}
                   aria-label="Deep research"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
@@ -2250,7 +2408,7 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={toggleImage}
-                  disabled={sending}
+                  disabled={sending || !!conv.paranoid}
                   aria-pressed={!!conv.image}
                   aria-label="Image mode"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
@@ -2263,7 +2421,7 @@ export function ChatPage() {
               </Tooltip>
               <Tooltip
                 content={
-                  shieldCfg.on
+                  shieldOn
                     ? 'Prompt Shield is on: names, emails, phone numbers, addresses, wallets and keys are swapped for placeholders in your browser before sending.'
                     : 'Prompt Shield is off: messages are sent exactly as written.'
                 }
@@ -2271,21 +2429,22 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={() => setShieldCfg((c) => ({ ...c, on: !c.on }))}
-                  aria-pressed={shieldCfg.on}
+                  disabled={!!conv.paranoid}
+                  aria-pressed={shieldOn}
                   aria-label="Prompt Shield"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors ${
-                    shieldCfg.on ? 'border-ok/35 bg-ok/[0.08] text-ok/90' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
+                    shieldOn ? 'border-ok/35 bg-ok/[0.08] text-ok/90' : 'border-line-2 text-dim hover:border-line-3 hover:text-soft'
                   }`}
                 >
                   <ShieldCheck className="size-3.5" />
-                  <span className={shieldCfg.on ? 'hidden sm:inline' : 'hidden'}>SHIELD</span>
+                  <span className={shieldOn ? 'hidden sm:inline' : 'hidden'}>SHIELD</span>
                 </button>
               </Tooltip>
               <Tooltip content={conv.compare ? 'Compare is on: two models answer every message, side by side. Each answer is paid separately.' : 'Ask two models at once and compare their answers.'}>
                 <button
                   type="button"
                   onClick={toggleCompare}
-                  disabled={sending}
+                  disabled={sending || !!conv.paranoid}
                   aria-pressed={!!conv.compare}
                   aria-label="Compare two models"
                   className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 font-mono text-[11px] tracking-[0.08em] transition-colors disabled:opacity-50 ${
@@ -2358,7 +2517,7 @@ export function ChatPage() {
                 </button>
               )}
             </div>
-            <PrivacyLine web={!!conv.web || !!conv.research} image={!!conv.image} shieldOn={shieldCfg.on} />
+            <PrivacyLine web={!!conv.web || !!conv.research} image={!!conv.image} shieldOn={shieldOn} />
           </div>
         </div>
       </main>

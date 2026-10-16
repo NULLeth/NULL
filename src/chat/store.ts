@@ -66,6 +66,8 @@ export interface ChatMessage {
   files?: ChatFile[]
   /** Private Deep Research: the searches behind this report */
   research?: { steps: ResearchStep[] }
+  /** paranoid mode: how long the request waited before it left (random, ms) */
+  delayMs?: number
   /** Private Memory: the notes picked for this message (wire: as the model saw them) */
   memory?: { id: string; text: string; wire?: string }[]
 }
@@ -93,6 +95,8 @@ export interface Conversation {
   research?: boolean
   /** ghost chat: never saved, files kept only in memory, erased when you leave it */
   ghost?: boolean
+  /** paranoid mode (always a ghost chat too): Tor only, AI Shield forced, random delay, no memory/web/files */
+  paranoid?: boolean
   model2?: string
 }
 

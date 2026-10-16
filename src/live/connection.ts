@@ -33,6 +33,22 @@ export async function checkConnection(): Promise<void> {
   }
 }
 
+/** Runs the check again now (or waits for the one in flight) and returns the result. */
+export async function recheckConnection(): Promise<Connection> {
+  if (state.status === 'checking')
+    await new Promise<void>((resolve) => {
+      const l = () => {
+        if (state.status !== 'checking') {
+          listeners.delete(l)
+          resolve()
+        }
+      }
+      listeners.add(l)
+    })
+  else await checkConnection()
+  return state
+}
+
 export function useConnection(auto = true): Connection & { check: () => void } {
   const [c, setC] = useState(state)
   useEffect(() => {
