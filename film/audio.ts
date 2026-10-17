@@ -25,6 +25,7 @@ import { CROWD_CUES, CROWD_DURATION } from './crowd'
 import { SHARE_CUES, SHARE_DURATION } from './share'
 import { MEMORY_CUES, MEMORY_DURATION } from './memory'
 import { PARANOID_CUES, PARANOID_DURATION } from './paranoid'
+import { OUTBOX_CUES, OUTBOX_DURATION } from './outbox'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -582,6 +583,25 @@ export const paranoidSound: Soundtrack = (ctx, out) => {
   tick(ctx, out, K.answer, 1479.98, 0.11)
   hit(ctx, out, K.blocked, 0.24, 120, 50, 0.3)
   sweep(ctx, out, K.route + 0.3, K.route + 1.4, 400, 2200, 0.03)
+  K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Outbox promo: typing, send, the answer, the click, a tick per row, the unfold, the placeholders, three not-ins, three points. */
+export const outboxSound: Soundtrack = (ctx, out) => {
+  const K = OUTBOX_CUES
+  pad(ctx, out, 0, OUTBOX_DURATION, [1.0, K.word[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  const n = 40
+  for (let i = 0; i < n; i++) click(ctx, out, 3.4 + ((K.send - 3.6) * i) / n, 0.08, 61000 + i * 59)
+  tick(ctx, out, K.send, 1174.66, 0.12)
+  tick(ctx, out, K.answer, 1318.51, 0.1)
+  tick(ctx, out, K.click, 1479.98, 0.12)
+  K.rows.forEach((at, i) => tick(ctx, out, at, [987.77, 1108.73, 1174.66][i], 0.08))
+  sweep(ctx, out, K.unfold, K.unfold + 0.6, 500, 1900, 0.03)
+  hit(ctx, out, K.tags, 0.24, 130, 55, 0.32)
+  hit(ctx, out, K.word[0] + 0.2, 0.26, 120, 50, 0.32)
+  K.notIn.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
