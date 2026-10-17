@@ -4,6 +4,7 @@ import { sleep } from '../lib/random'
 import { cannedChat } from '../protocol/responses'
 import { cannedSearch } from '../protocol/responses'
 import { providerError, readStream, type Source } from '../live/stream'
+import { recordDemo } from './outbox'
 import { SHIELD_SYSTEM } from './shield'
 
 export type WirePart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
@@ -120,6 +121,14 @@ export async function withKey(
   }
 }
 
+/** The body of an answer request: what the provider receives. */
+const chatBody = (model: string, history: WireMessage[], hooks: SendHooks) => ({
+  model,
+  stream: true,
+  messages: [SYSTEM, ...(hooks.shield ? [{ role: 'system', content: SHIELD_SYSTEM }] : []), ...history],
+  ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}),
+})
+
 /** One chat turn on the live zkAPI deployment, streamed. */
 export async function sendLive(client: ZkClient, sessionId: string, model: string, history: WireMessage[], hooks: SendHooks): Promise<void> {
   await withKey(
@@ -131,12 +140,7 @@ export async function sendLive(client: ZkClient, sessionId: string, model: strin
       fetch(`${access.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: access.headers,
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: [SYSTEM, ...(hooks.shield ? [{ role: 'system', content: SHIELD_SYSTEM }] : []), ...history],
-          ...(hooks.web ? { plugins: [WEB_PLUGIN] } : {}),
-        }),
+        body: JSON.stringify(chatBody(model, history, hooks)),
         signal: hooks.signal,
       }),
     async (res) => {
@@ -185,6 +189,8 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   const lastMsg = [...history].reverse().find((m) => m.role === 'user')
   const last = lastMsg ? textOf(lastMsg.content) : ''
   const photos = Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === 'image_url').length : 0
+  // the Outbox shows the request a live answer would send, marked as a demo
+  recordDemo('openrouter.ai', '/api/v1/chat/completions', chatBody(model, history, hooks))
   hooks.onPhase('Generating proof…')
   await sleep(650)
   hooks.onPhase('Request authorized…')

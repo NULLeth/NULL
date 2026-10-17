@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, ArrowUpFromLine, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -30,6 +30,8 @@ import { ShareDialog, type ShareItem } from './ShareDialog'
 import { CrowdDialog } from './CrowdDialog'
 import { fitLevel, loadMemoryModel, MAX_RECALL, memoryBlock, recall, useMemory, type Recalled } from './memory'
 import { MemoryDialog, type ModelStatus } from './MemoryDialog'
+import { clearOutbox, installOutbox, useOutbox } from './outbox'
+import { OutboxDialog } from './OutboxDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
@@ -37,6 +39,9 @@ import { VoiceButton } from './VoiceButton'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
 import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
 import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatFile, type ChatMessage, type Conversation } from './store'
+
+// the Outbox starts listing requests before anything on the chat page runs
+if (window.location.pathname === '/chat') installOutbox()
 
 const MODELS = LIVE.chatModels
 const DEFAULT_MODEL = MODELS[0].id
@@ -448,6 +453,26 @@ function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; s
 }
 
 /** Above the composer: what the shield will hide in the message being typed. */
+/** The header's way into the Outbox, with how many requests this tab has sent. */
+function OutboxButton({ onClick }: { onClick: () => void }) {
+  const { entries } = useOutbox()
+  const n = entries.filter((e) => !e.demo).length
+  return (
+    <Tooltip content="Outbox: every request this page sent, with exactly what was in it. Don't trust us, check it.">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Open the outbox"
+        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-2 px-2.5 font-mono text-[10px] tracking-[0.14em] text-dim transition-colors hover:border-line-3 hover:text-soft"
+      >
+        <ArrowUpFromLine className="size-3.5" />
+        <span className="hidden sm:inline">OUTBOX</span>
+        {n > 0 && <span className="tracking-normal text-soft">{n}</span>}
+      </button>
+    </Tooltip>
+  )
+}
+
 /** paranoid mode: no detail can be clicked to "send as written" */
 const NO_SKIP: Set<string> = new Set()
 
@@ -1219,12 +1244,14 @@ function Messages({
   onRetry,
   onShare,
   onRemember,
+  onOutbox,
 }: {
   conv: Conversation
   phase: string
   streamingId: string | null
   onRetry: () => void
   onShare: (item: ShareItem) => void
+  onOutbox: () => void
   /** not in ghost chats: they never add to memory */
   onRemember?: (text: string) => void
 }) {
@@ -1307,6 +1334,12 @@ function Messages({
                   <Tooltip content="Paid from your private balance with a zero-knowledge proof. The provider never saw your wallet.">
                     <span className="text-ok/80">paid by proof ✓</span>
                   </Tooltip>
+                  <Tooltip content="See exactly what this page sent: the request, its size, and the placeholders in place of your details.">
+                    <button type="button" onClick={onOutbox} className="inline-flex items-center gap-1 text-dim transition-colors hover:text-fg">
+                      <ArrowUpFromLine className="size-3" />
+                      what was sent
+                    </button>
+                  </Tooltip>
                   {!!m.images?.length && i === conv.messages.length - 1 && <span className="text-faint">reply to edit this image</span>}
                   {!m.image && m.content && (
                     <Tooltip content="Share this answer with a link that carries it inside. Nothing is uploaded.">
@@ -1362,6 +1395,7 @@ export function ChatPage() {
   const [autoDays, setAutoDays] = useState(loadAutoDelete)
   const [crowdOpen, setCrowdOpen] = useState(false)
   const [shareItem, setShareItem] = useState<ShareItem | null>(null)
+  const [outboxOpen, setOutboxOpen] = useState(false)
   const memory = useMemory()
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [memoryPrefill, setMemoryPrefill] = useState('')
@@ -1865,6 +1899,7 @@ export function ChatPage() {
     if (conv.messages.length) {
       void deleteImages(imageIds(conv))
       remove(conv.id)
+      clearOutbox()
     }
   }
 
@@ -2146,6 +2181,7 @@ export function ChatPage() {
             </Button>
           )}
           <div className="ml-auto flex items-center gap-2">
+            <OutboxButton onClick={() => setOutboxOpen(true)} />
             <Tooltip
               content={
                 conv.paranoid
@@ -2199,7 +2235,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldOn} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} paranoid={!!conv.paranoid} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldOn} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} paranoid={!!conv.paranoid} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} onOutbox={() => setOutboxOpen(true)} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -2523,6 +2559,7 @@ export function ChatPage() {
       </main>
       <CrowdDialog open={crowdOpen} onClose={() => setCrowdOpen(false)} />
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
+      <OutboxDialog open={outboxOpen} onClose={() => setOutboxOpen(false)} />
       <MemoryDialog
         open={memoryOpen}
         onClose={() => setMemoryOpen(false)}
