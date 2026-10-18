@@ -149,7 +149,7 @@ async function readPhoto(file: File, opts: ReadOptions): Promise<PhotoFile> {
   const scale = Math.min(1, PHOTO_EDGE / Math.max(bitmap.width, bitmap.height))
   const width = Math.max(1, Math.round(bitmap.width * scale))
   const height = Math.max(1, Math.round(bitmap.height * scale))
-  const canvas = document.createElement('canvas')
+  let canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')!
@@ -163,6 +163,8 @@ async function readPhoto(file: File, opts: ReadOptions): Promise<PhotoFile> {
   bitmap.close()
   const mime = png ? 'image/png' : 'image/jpeg'
   const [faceBoxes, text] = await Promise.all([findFaces(canvas).catch(() => null), findTextDetails(canvas, opts).catch(() => null)])
+  // Wallet Guard: seed phrases and keys are covered in every version of the photo, always
+  if (text?.guard.length) canvas = coverText(canvas, text.guard)
   const variants: PhotoFile['variants'] = {}
   const blurred = faceBoxes?.length ? blurFaces(canvas, faceBoxes) : null
   if (blurred) variants.faces = blurred.toDataURL(mime, 0.88)

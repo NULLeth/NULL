@@ -1,6 +1,7 @@
 import type { Worker } from 'tesseract.js'
 import { mergeHits } from './aiShield'
 import { detect, KIND_LABEL, type ShieldHit, type ShieldKind } from './shield'
+import { findWallet, outsideGuard } from './walletGuard'
 
 /**
  * Screenshot Shield: reads the text in an attached picture with Tesseract (OCR, in a web
@@ -66,7 +67,7 @@ function fixOcr(s: string): string {
 export async function findTextDetails(
   canvas: HTMLCanvasElement,
   opts: { words?: string[]; ai?: (text: string) => Promise<ShieldHit[]> } = {},
-): Promise<{ boxes: TextBox[]; covered: Covered[] }> {
+): Promise<{ boxes: TextBox[]; covered: Covered[]; guard: TextBox[] }> {
   const w = await getWorker()
   const { data } = await w.recognize(canvas, {}, { blocks: true, text: false })
   // the page's words, line by line, with where each sits in the joined text. Every word
@@ -97,8 +98,12 @@ export async function findTextDetails(
         text += `${s}\n`
         line++
       }
-  if (!text.trim()) return { boxes: [], covered: [] }
+  if (!text.trim()) return { boxes: [], covered: [], guard: [] }
   if (opts.ai) hits = mergeHits(hits, await opts.ai(text).catch(() => []))
+  // Wallet Guard reads the whole picture at once: a seed phrase is often a grid over many lines
+  const guardHits = findWallet(text)
+  hits = [...guardHits, ...outsideGuard(hits, guardHits)]
+  const guard: TextBox[] = []
   const boxes: TextBox[] = []
   const covered: Covered[] = []
   for (const h of hits) {
@@ -125,9 +130,10 @@ export async function findTextDetails(
     }
     if (!byLine.size) continue
     boxes.push(...byLine.values())
+    if (h.kind === 'SEED' || h.kind === 'KEY') guard.push(...byLine.values())
     covered.push({ kind: h.kind, value: h.value })
   }
-  return { boxes, covered }
+  return { boxes, covered, guard }
 }
 
 /** A copy of the picture with each detail covered by a box that names its kind. */

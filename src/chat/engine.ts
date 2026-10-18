@@ -203,8 +203,10 @@ export async function sendDemo(model: string, history: WireMessage[], hooks: Sen
   const text =
     last.includes('<document ') || photos
       ? filesDemo(last, photos, tags.length)
-      : last.includes('<memory>')
-        ? memoryDemo(last)
+      : /\[(SEED|KEY)_\d+\]/.test(last)
+        ? guardDemo()
+        : last.includes('<memory>')
+          ? memoryDemo(last)
         : hooks.shield && tags.length
           ? shieldDemo(tags)
           : cannedChat(last, model)
@@ -234,6 +236,17 @@ function filesDemo(last: string, photos: number, tags: number): string {
   if (tags) lines.push(`- **${tags} placeholder${tags === 1 ? '' : 's'}** such as [NAME_1] in place of personal details`)
   lines.push('', 'The files themselves never leave this browser. Only the text and the cleaned photos would be sent, and only for this answer.')
   return lines.join('\n')
+}
+
+/** Demo answer when Wallet Guard kept a seed phrase or key back: what a careful model would say. */
+function guardDemo(): string {
+  return [
+    '**Demo answer.** I only see a placeholder: your browser kept the seed phrase (or key) and never sent it.',
+    '',
+    'Please don’t share it with anyone, an AI included. Whoever has those words controls the wallet, and no wallet, exchange or support team will ever ask for them.',
+    '',
+    'If you pasted it anywhere else, assume it is exposed: create a new wallet and move your funds there.',
+  ].join('\n')
 }
 
 /** Demo answer when memory notes went along: says plainly which notes the model would get. */

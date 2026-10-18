@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ArrowUpFromLine, Brain, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, ArrowUpFromLine, Brain, KeyRound, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -30,6 +30,7 @@ import { ShareDialog, type ShareItem } from './ShareDialog'
 import { CrowdDialog } from './CrowdDialog'
 import { fitLevel, loadMemoryModel, MAX_RECALL, memoryBlock, recall, useMemory, type Recalled } from './memory'
 import { MemoryDialog, type ModelStatus } from './MemoryDialog'
+import { findWallet, outsideGuard, seedChecksumOk, type GuardHit } from './walletGuard'
 import { clearOutbox, installOutbox, useOutbox } from './outbox'
 import { OutboxDialog } from './OutboxDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
@@ -37,7 +38,7 @@ import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
 import { VoiceButton } from './VoiceButton'
 import { AI_MODEL_MB, detectAi, loadAiShield, mergeHits } from './aiShield'
-import { detect, KIND_LABEL, restore, shield, type ShieldHit } from './shield'
+import { detect, KIND_LABEL, restore, shield, type ShieldHit, type ShieldMap } from './shield'
 import { newConversation, newMessage, titleFrom, useConversations, type AltAnswer, type ChatFile, type ChatMessage, type Conversation } from './store'
 
 // the Outbox starts listing requests before anything on the chat page runs
@@ -453,6 +454,52 @@ function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; s
 }
 
 /** Above the composer: what the shield will hide in the message being typed. */
+/** Wallet Guard, above the composer: what it found and that it won't leave, whatever else is switched on. */
+function GuardBar({ hits, files, map }: { hits: GuardHit[]; files: { name: string; n: number; photo: boolean }[]; map: ShieldMap }) {
+  // a real BIP-39 checksum says it is a wallet seed, not words that happen to be on the list
+  const [valid, setValid] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    let alive = true
+    for (const h of hits)
+      if (h.words && !(h.value in valid))
+        void seedChecksumOk(h.words).then((ok) => alive && setValid((v) => ({ ...v, [h.value]: ok })))
+    return () => {
+      alive = false
+    }
+  }, [hits, valid])
+  // the placeholder each one will get: the chat's own if it was sent before, else the next free one
+  const next = { SEED: Object.values(map).filter((t) => t.startsWith('[SEED_')).length, KEY: Object.values(map).filter((t) => t.startsWith('[KEY_')).length }
+  return (
+    <div className="mb-2 rounded-lg border border-bad/35 bg-bad/[0.05] px-3 py-2 font-mono text-[10.5px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="inline-flex items-center gap-1 tracking-[0.12em] text-bad">
+          <KeyRound className="size-3.5" />
+          WALLET GUARD
+        </span>
+        {hits.map((h) => {
+          const tag = map[h.value] ?? `[${h.kind}_${++next[h.kind]}]`
+          return (
+            <span key={`${h.start}:${h.end}`} className="inline-flex h-6 items-center gap-1 rounded-md border border-bad/30 bg-bad/[0.06] px-2 text-bad/90">
+              {h.what}
+              {h.words && valid[h.value] && <span className="text-soft">· real BIP-39 checksum</span>}
+              <span className="text-dim">→ goes out as {tag}</span>
+            </span>
+          )
+        })}
+        {files.map((f) => (
+          <span key={f.name} className="inline-flex h-6 items-center gap-1 rounded-md border border-bad/30 bg-bad/[0.06] px-2 text-bad/90">
+            {f.name} · {f.photo ? 'covered in the picture' : `${f.n} → placeholder`}
+          </span>
+        ))}
+      </div>
+      <p className="mt-1.5 leading-relaxed text-soft">
+        This never leaves your browser, not even with the shield off. Anyone with a seed phrase or private key owns the wallet: if you pasted it anywhere else, move your
+        funds to a new wallet.
+      </p>
+    </div>
+  )
+}
+
 /** The header's way into the Outbox, with how many requests this tab has sent. */
 function OutboxButton({ onClick }: { onClick: () => void }) {
   const { entries } = useOutbox()
@@ -837,9 +884,13 @@ function AttachTray({
           const removed = a.file?.removed ?? []
           const blurred = !!photo?.faces && a.blur !== false
           const facePart = photo?.faces ? `${photo.faces} face${photo.faces === 1 ? '' : 's'} ${blurred ? 'blurred' : 'shown'}` : ''
-          const nCovered = photo?.covered.length ?? 0
+          // Wallet Guard's finds are covered whatever the switch says; the switch is about the rest
+          const nGuard = photo?.covered.filter((c) => c.kind === 'SEED' || c.kind === 'KEY').length ?? 0
+          const nCovered = (photo?.covered.length ?? 0) - nGuard
           const coveredOn = nCovered > 0 && a.cover !== false
-          const textPart = nCovered ? `${nCovered} detail${nCovered === 1 ? '' : 's'} ${coveredOn ? 'covered' : 'shown'}` : ''
+          const textPart = [nGuard ? `${nGuard === 1 ? 'seed phrase / key' : `${nGuard} seed phrases / keys`} covered` : '', nCovered ? `${nCovered} detail${nCovered === 1 ? '' : 's'} ${coveredOn ? 'covered' : 'shown'}` : '']
+            .filter(Boolean)
+            .join(' · ')
           const dataPart = removed.length ? `${removed[0].replace(/\s*\(.*$/, '')} removed${removed.length > 1 ? ` +${removed.length - 1}` : ''}` : ''
           const note =
             a.status === 'reading'
@@ -853,7 +904,7 @@ function AttachTray({
                     ? `${doc.pages ? `${doc.pages} page${doc.pages === 1 ? '' : 's'} · ` : ''}${fmtChars(doc.text.length)} · ${fmtTokens(doc.text.length)}${doc.truncated ? ' · first part' : ''}`
                     : ''
           const tip =
-            [removed.length ? `Stays in your browser: ${removed.join(', ')}` : '', nCovered ? `Covered in the picture: ${photo!.covered.map((c) => `${KIND_LABEL[c.kind]} · ${c.value}`).join(', ')}` : '']
+            [removed.length ? `Stays in your browser: ${removed.join(', ')}` : '', nCovered || nGuard ? `Covered in the picture: ${photo!.covered.map((c) => `${KIND_LABEL[c.kind]} · ${c.value}`).join(', ')}` : '']
               .filter(Boolean)
               .join('\n') || undefined
           const noteTone =
@@ -861,7 +912,7 @@ function AttachTray({
               ? 'text-bad/90'
               : (photo?.faces && !blurred) || (nCovered && !coveredOn)
                 ? 'text-warn/90'
-                : photo && (removed.length || blurred || coveredOn)
+                : photo && (removed.length || blurred || coveredOn || nGuard)
                   ? 'text-ok/90'
                   : 'text-dim'
           return (
@@ -1459,13 +1510,17 @@ export function ChatPage() {
   const aiCurrent = aiWanted && ai.status === 'ready' && aiHits.text === input
   const { hits, aiKeys } = useMemo(() => {
     if (!shieldOn || !input.trim()) return { hits: [], aiKeys: new Set<string>() }
-    const found = detect(input, shieldCfg.words)
+    // what Wallet Guard covers is shown in its own bar
+    const guarded = findWallet(input)
+    const found = outsideGuard(detect(input, shieldCfg.words), guarded)
     if (!aiCurrent) return { hits: found, aiKeys: new Set<string>() }
     // pattern hits win ties, so only what the patterns missed is marked "AI"
-    const merged = mergeHits(found, aiHits.hits)
+    const merged = outsideGuard(mergeHits(found, aiHits.hits), guarded)
     const fromAi = new Set(aiHits.hits)
     return { hits: merged, aiKeys: new Set(merged.filter((h) => fromAi.has(h)).map((h) => `${h.start}:${h.end}`)) }
   }, [input, shieldCfg, shieldOn, aiCurrent, aiHits])
+  // Wallet Guard: always on, whatever the shield switch says
+  const guardHits = useMemo(() => findWallet(input), [input])
 
   // Private Memory: load the in-browser model once there are notes, then pick notes for what is typed
   const memWanted = memory.on && memory.notes.length > 0
@@ -1556,6 +1611,17 @@ export function ChatPage() {
   }
   const removeFile = (key: string) => setAttached((c) => c.filter((a) => a.key !== key))
   const readyFiles = attached.filter((a) => a.status === 'ready' && a.file)
+  /** attached files with a seed phrase or key in them (documents: their text; photos: what OCR read) */
+  const guardFiles = useMemo(
+    () =>
+      attached.flatMap((a) => {
+        const f = a.file
+        if (!f) return []
+        const n = f.kind === 'doc' ? findWallet(f.text).length : f.covered.filter((c) => c.kind === 'SEED' || c.kind === 'KEY').length
+        return n ? [{ name: a.name, n, photo: f.kind === 'photo' }] : []
+      }),
+    [attached],
+  )
   const stillReading = attached.some((a) => a.status === 'reading')
   const compareModel = conv.compare && !conv.image ? (conv.model2 ?? secondModel(conv.model)) : null
   const blind = attached.some((a) => a.file?.kind === 'photo') ? [conv.model, compareModel].filter((m): m is string => !!m && !canSee(m)) : []
@@ -1812,14 +1878,19 @@ export function ChatPage() {
       let extra: Partial<ChatMessage> = {}
       let hidden = 0
       const shieldText = async (s: string) => {
-        let found = detect(s, shieldCfg.words)
-        if (aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(s).catch(() => []))
-        const r = shield(s, found, map, skipNow)
+        // Wallet Guard first and always; the shield's own finds only with the shield on
+        const guard = findWallet(s)
+        let found = shieldOn ? detect(s, shieldCfg.words) : []
+        if (shieldOn && aiWanted && ai.status === 'ready') found = mergeHits(found, await detectAi(s).catch(() => []))
+        found = [...guard, ...outsideGuard(found, guard)].sort((a, b) => a.start - b.start)
+        // nothing the guard found can be clicked to "send as written"
+        const skipping = new Set([...skipNow].filter((v) => !guard.some((g) => g.value === v)))
+        const r = shield(s, found, map, skipping)
         map = r.map
         hidden += r.used.length
         return r
       }
-      if (shieldOn && content) {
+      if ((shieldOn || findWallet(content).length) && content) {
         const s = await shieldText(content)
         if (s.used.length) extra = { wire: s.text }
       }
@@ -1832,14 +1903,16 @@ export function ChatPage() {
           const blur = a.blur !== false && f.faces > 0
           const cover = a.cover !== false && f.covered.length > 0
           await putImage(id, photoUrl(f, blur, cover))
-          stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed, faces: blur ? f.faces : 0, covered: cover ? f.covered.length : 0 })
+          // what Wallet Guard covered stays covered even with the cover switch off
+          const guarded = f.covered.filter((c) => c.kind === 'SEED' || c.kind === 'KEY').length
+          stored.push({ id, kind: 'photo', name: f.name, mime: f.mime, removed: f.removed, faces: blur ? f.faces : 0, covered: cover ? f.covered.length : guarded })
           continue
         }
         const id = fileId('doc', conv.ghost)
         const block = docBlock(f)
         await putText(id, block)
         let shielded = 0
-        if (shieldOn) {
+        if (shieldOn || findWallet(block).length) {
           const s = await shieldText(block)
           if (s.used.length) {
             await putText(`${id}.wire`, s.text)
@@ -2321,6 +2394,7 @@ export function ChatPage() {
                 onCover={(key) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, cover: a.cover === false } : a)))}
                 warn={fileWarn}
               />}
+            {(guardHits.length > 0 || guardFiles.length > 0) && <GuardBar hits={guardHits} files={guardFiles} map={conv.shieldMap ?? {}} />}
             {memPreview && (
               <MemoryBar
                 list={memPreview}

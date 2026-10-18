@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { Spinner } from '../components/ui/Spinner'
+import { findWallet } from './walletGuard'
 import { fitLevel, MAX_NOTE_CHARS, MAX_RECALL, MEMORY_MODEL_MB, recall, type MemoryNote, type Recalled } from './memory'
 
 export type ModelStatus = { status: 'off' | 'loading' | 'ready' | 'error'; progress: number }
@@ -62,8 +63,9 @@ export function MemoryDialog({
     }
   }, [probe, notes, model.status])
 
+  const guarded = findWallet(text).length > 0
   const add = () => {
-    if (!text.trim()) return
+    if (!text.trim() || guarded) return
     onAdd(text)
     setText('')
   }
@@ -114,10 +116,11 @@ export function MemoryDialog({
               placeholder="Something NULL should know, in one or two sentences"
               className="min-h-[44px] flex-1 resize-none rounded-md border border-line-2 bg-bg/60 px-3 py-2 text-[13.5px] leading-relaxed text-fg outline-none placeholder:text-faint focus:border-line-3"
             />
-            <Button variant="primary" onClick={add} disabled={!text.trim()} icon={<Brain className="size-3.5" />}>
+            <Button variant="primary" onClick={add} disabled={!text.trim() || guarded} icon={<Brain className="size-3.5" />}>
               Remember
             </Button>
           </div>
+          {guarded && <p className="mt-1.5 font-mono text-[11px] text-bad/90">Wallet Guard: a seed phrase or private key can&apos;t be saved, not even here.</p>}
         </div>
 
         {notes.length > 0 && (

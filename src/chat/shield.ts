@@ -13,6 +13,8 @@ export type ShieldKind =
   | 'PHONE'
   | 'WALLET'
   | 'SECRET'
+  | 'SEED'
+  | 'KEY'
   | 'IBAN'
   | 'CARD'
   | 'IP'
@@ -40,6 +42,8 @@ export const KIND_LABEL: Record<ShieldKind, string> = {
   PHONE: 'phone',
   WALLET: 'wallet',
   SECRET: 'key / secret',
+  SEED: 'seed phrase',
+  KEY: 'private key',
   IBAN: 'IBAN',
   CARD: 'card',
   IP: 'IP',
@@ -198,7 +202,7 @@ export function shield(text: string, hits: ShieldHit[], map: ShieldMap, skip: Se
   return { text: out + text.slice(last), map: next, used }
 }
 
-const TAG_RE = /\[?\b(EMAIL|PHONE|WALLET|SECRET|IBAN|CARD|IP|ADDRESS|DATE|AGE|NAME|PLACE|ORG|ID|CUSTOM)_(\d{1,3})\b\]?/gi
+const TAG_RE = /\[?\b(EMAIL|PHONE|WALLET|SECRET|SEED|KEY|IBAN|CARD|IP|ADDRESS|DATE|AGE|NAME|PLACE|ORG|ID|CUSTOM)_(\d{1,3})\b\]?/gi
 
 /** Puts the real details back into a model answer (only here, in the browser). */
 export function restore(text: string, map: ShieldMap): string {
