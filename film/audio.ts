@@ -26,6 +26,7 @@ import { SHARE_CUES, SHARE_DURATION } from './share'
 import { MEMORY_CUES, MEMORY_DURATION } from './memory'
 import { PARANOID_CUES, PARANOID_DURATION } from './paranoid'
 import { OUTBOX_CUES, OUTBOX_DURATION } from './outbox'
+import { GUARD_CUES, GUARD_DURATION } from './guard'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -603,6 +604,25 @@ export const outboxSound: Soundtrack = (ctx, out) => {
   hit(ctx, out, K.word[0] + 0.2, 0.26, 120, 50, 0.32)
   K.notIn.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Wallet Guard promo: the paste, an alarm-ish double tick for the guard, the checksum, send, the answer, the placeholder hit, a tick per covered row, the key cards. */
+export const guardSound: Soundtrack = (ctx, out) => {
+  const K = GUARD_CUES
+  pad(ctx, out, 0, GUARD_DURATION, [1.0, K.wire[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  click(ctx, out, K.paste, 0.14, 71001)
+  tick(ctx, out, K.bar, 880, 0.12)
+  tick(ctx, out, K.bar + 0.12, 880, 0.1)
+  tick(ctx, out, K.checksum, 1661.22, 0.11)
+  tick(ctx, out, K.send, 1174.66, 0.12)
+  tick(ctx, out, K.answer, 1318.51, 0.1)
+  hit(ctx, out, K.wire[0] + 0.2, 0.28, 130, 55, 0.38)
+  sweep(ctx, out, K.stayed, K.stayed + 1.0, 400, 1600, 0.025)
+  for (let i = 0; i < 4; i++) tick(ctx, out, K.cover + i * 0.21, [987.77, 1108.73, 1174.66, 1318.51][i], 0.08)
+  K.keyItems.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22, 1760][i], 0.09))
+  tick(ctx, out, K.pass, 1174.66, 0.1)
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 

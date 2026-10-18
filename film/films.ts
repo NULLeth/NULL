@@ -1,4 +1,4 @@
-import { agentsSound, aiShieldSound, backupSound, chatSound, crowdSound, shareSound, memorySound, paranoidSound, outboxSound, ghostSound, researchSound, weekSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
+import { agentsSound, aiShieldSound, backupSound, chatSound, crowdSound, shareSound, memorySound, paranoidSound, outboxSound, guardSound, ghostSound, researchSound, weekSound, facesSound, filesSound, screenshotSound, voiceSound, compareSound, howSound, imageSound, launchSound, modelsSound, shieldSound, torSound, webSound, type Soundtrack } from './audio'
 import { CHAT_DURATION, drawChat } from './chat'
 import { HOW_DURATION, drawHow } from './how'
 import { DURATION, drawLaunch } from './launch'
@@ -23,6 +23,7 @@ import { SHARE_DURATION, drawShare } from './share'
 import { MEMORY_DURATION, drawMemory } from './memory'
 import { PARANOID_DURATION, drawParanoid } from './paranoid'
 import { OUTBOX_DURATION, drawOutbox } from './outbox'
+import { GUARD_DURATION, drawGuard } from './guard'
 
 export interface Film {
   duration: number
@@ -32,6 +33,7 @@ export interface Film {
 }
 
 export const FILMS: Record<string, Film> = {
+  guard: { duration: GUARD_DURATION, sound: guardSound, draw: drawGuard },
   outbox: { duration: OUTBOX_DURATION, sound: outboxSound, draw: drawOutbox },
   paranoid: { duration: PARANOID_DURATION, sound: paranoidSound, draw: drawParanoid },
   memory: { duration: MEMORY_DURATION, sound: memorySound, draw: drawMemory },
