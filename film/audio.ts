@@ -27,6 +27,7 @@ import { MEMORY_CUES, MEMORY_DURATION } from './memory'
 import { PARANOID_CUES, PARANOID_DURATION } from './paranoid'
 import { OUTBOX_CUES, OUTBOX_DURATION } from './outbox'
 import { GUARD_CUES, GUARD_DURATION } from './guard'
+import { READ_CUES, READ_DURATION } from './readaloud'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -623,6 +624,21 @@ export const guardSound: Soundtrack = (ctx, out) => {
   for (let i = 0; i < 4; i++) tick(ctx, out, K.cover + i * 0.21, [987.77, 1108.73, 1174.66, 1318.51][i], 0.08)
   K.keyItems.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22, 1760][i], 0.09))
   tick(ctx, out, K.pass, 1174.66, 0.1)
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Read Aloud promo: a tick per voice, a low buzz for the hidden cloud voices, the listen click, a soft pulse per sentence, a tick per loop step, three points. */
+export const readSound: Soundtrack = (ctx, out) => {
+  const K = READ_CUES
+  pad(ctx, out, 0, READ_DURATION, [1.0, K.chat[0], K.loop[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  K.local.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98][i], 0.09))
+  K.cloud.forEach((at) => tick(ctx, out, at, 740, 0.08))
+  hit(ctx, out, K.hide, 0.22, 110, 50, 0.3)
+  tick(ctx, out, K.listen, 1318.51, 0.12)
+  for (let s = 0; s < 4; s++) hit(ctx, out, K.reading[0] + s * ((K.reading[1] - K.reading[0]) / 4), 0.14, 160, 80, 0.14)
+  K.steps.forEach((at, i) => tick(ctx, out, at, [987.77, 1108.73, 1174.66, 1318.51, 1479.98][i], 0.09))
+  K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 
