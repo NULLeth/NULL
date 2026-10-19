@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ArrowUpFromLine, Brain, KeyRound, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, ArrowUpFromLine, Brain, KeyRound, Volume2, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -33,6 +33,8 @@ import { MemoryDialog, type ModelStatus } from './MemoryDialog'
 import { findWallet, outsideGuard, seedChecksumOk, type GuardHit } from './walletGuard'
 import { clearOutbox, installOutbox, useOutbox } from './outbox'
 import { OutboxDialog } from './OutboxDialog'
+import { loadReadAloud, pickVoice, saveReadAloud, speak, speakable, useVoices, type Reading } from './readAloud'
+import { ReadAloudDialog } from './ReadAloudDialog'
 import { deleteImages, fileId, getImageBlob, getImageDataUrl, getText, putBlob, putImage, putText, useImageUrl } from './images'
 import { Markdown } from './Markdown'
 import { researchDemo, researchLive, type ResearchHooks, type ResearchStep } from './research'
@@ -1296,6 +1298,9 @@ function Messages({
   onShare,
   onRemember,
   onOutbox,
+  speaking,
+  onListen,
+  onVoices,
 }: {
   conv: Conversation
   phase: string
@@ -1303,6 +1308,10 @@ function Messages({
   onRetry: () => void
   onShare: (item: ShareItem) => void
   onOutbox: () => void
+  /** Read Aloud: the answer being read and how far */
+  speaking: { id: string; progress: number } | null
+  onListen: (m: ChatMessage) => void
+  onVoices: () => void
   /** not in ghost chats: they never add to memory */
   onRemember?: (text: string) => void
 }) {
@@ -1332,6 +1341,15 @@ function Messages({
               )}
               {streamingId === m.id && m.content && <span className="ml-0.5 inline-block w-[7px] animate-blink text-eth">▍</span>}
               {!!m.sources?.length && <Sources list={m.sources} />}
+              {speaking?.id === m.id && (
+                <div className="mt-3 flex max-w-[460px] items-center gap-2 font-mono text-[10.5px] text-ok/85">
+                  <Volume2 className="size-3 shrink-0" />
+                  <span className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                    <span className="block h-full rounded-full bg-ok/70 transition-[width] duration-200" style={{ width: `${Math.round(speaking.progress * 100)}%` }} />
+                  </span>
+                  reading on this device
+                </div>
+              )}
               {m.error && (
                 <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-bad/25 bg-bad/[0.05] px-3 py-2 text-[13px] text-bad/90">
                   {m.error}
@@ -1385,6 +1403,19 @@ function Messages({
                   <Tooltip content="Paid from your private balance with a zero-knowledge proof. The provider never saw your wallet.">
                     <span className="text-ok/80">paid by proof ✓</span>
                   </Tooltip>
+                  {!m.image && m.content && (
+                    <span className="inline-flex items-center">
+                      <Tooltip content="Read this answer aloud with a voice that runs on this device. Cloud voices are never used.">
+                        <button type="button" onClick={() => onListen(m)} className={`inline-flex items-center gap-1 transition-colors hover:text-fg ${speaking?.id === m.id ? 'text-ok' : 'text-dim'}`}>
+                          {speaking?.id === m.id ? <Square className="size-2.5 fill-current" /> : <Volume2 className="size-3" />}
+                          {speaking?.id === m.id ? 'stop' : 'listen'}
+                        </button>
+                      </Tooltip>
+                      <button type="button" onClick={onVoices} aria-label="Read aloud voices and speed" className="ml-0.5 text-faint transition-colors hover:text-fg">
+                        <ChevronDown className="size-3" />
+                      </button>
+                    </span>
+                  )}
                   <Tooltip content="See exactly what this page sent: the request, its size, and the placeholders in place of your details.">
                     <button type="button" onClick={onOutbox} className="inline-flex items-center gap-1 text-dim transition-colors hover:text-fg">
                       <ArrowUpFromLine className="size-3" />
@@ -1447,6 +1478,13 @@ export function ChatPage() {
   const [crowdOpen, setCrowdOpen] = useState(false)
   const [shareItem, setShareItem] = useState<ShareItem | null>(null)
   const [outboxOpen, setOutboxOpen] = useState(false)
+  // Private Read Aloud: on-device voices only
+  const voices = useVoices()
+  const [readCfg, setReadCfg] = useState(loadReadAloud)
+  const [readOpen, setReadOpen] = useState(false)
+  const [speaking, setSpeaking] = useState<{ id: string; progress: number } | null>(null)
+  const reader = useRef<Reading | null>(null)
+  const voice = pickVoice(voices.local, readCfg.voice)
   const memory = useMemory()
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [memoryPrefill, setMemoryPrefill] = useState('')
@@ -1553,6 +1591,51 @@ export function ChatPage() {
     }
   }, [input, memApplies, memCandidates])
   const memPreview = memApplies && input.trim() && memFound.text === input ? memFound.list : null
+
+  useEffect(() => saveReadAloud(readCfg), [readCfg])
+
+  /** Reads an answer aloud, or stops it when it is the one being read. */
+  const listen = useCallback(
+    (m: ChatMessage) => {
+      if (speaking?.id === m.id) {
+        reader.current?.stop()
+        reader.current = null
+        return
+      }
+      // no voice on this device: the dialog says so (cloud voices are never a fallback)
+      if (!voice) {
+        setReadOpen(true)
+        return
+      }
+      reader.current?.stop()
+      const id = m.id
+      setSpeaking({ id, progress: 0 })
+      reader.current = speak(speakable(m.content), voice, readCfg.rate, {
+        onProgress: (p) => setSpeaking((s) => (s?.id === id ? { id, progress: p } : s)),
+        onEnd: () => setSpeaking((s) => (s?.id === id ? null : s)),
+      })
+    },
+    [speaking, voice, readCfg.rate],
+  )
+
+  // reading stops when you switch chats
+  useEffect(
+    () => () => {
+      reader.current?.stop()
+      reader.current = null
+    },
+    [conv.id],
+  )
+
+  // auto-read: a new answer is read out once it is complete
+  const lastStreaming = useRef<string | null>(null)
+  useEffect(() => {
+    const was = lastStreaming.current
+    lastStreaming.current = streamingId
+    if (!was || streamingId || !readCfg.auto || !voice) return
+    const m = conv.messages.find((x) => x.id === was)
+    if (m && m.role === 'assistant' && m.content && !m.error && !m.image) listen(m)
+  }, [streamingId]) // only when an answer finishes
 
   const rememberText = useCallback((text: string) => {
     setMemoryPrefill(text)
@@ -2308,7 +2391,7 @@ export function ChatPage() {
 
         {/* conversation */}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldOn} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} paranoid={!!conv.paranoid} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} onOutbox={() => setOutboxOpen(true)} />}
+          {conv.messages.length === 0 ? <EmptyState onPick={send} disabled={!canSend} web={!!conv.web} image={!!conv.image} shieldOn={shieldOn} compare={!!conv.compare && !conv.image} research={!!conv.research} ghost={!!conv.ghost} paranoid={!!conv.paranoid} /> : <Messages conv={conv} phase={phase} streamingId={streamingId} onRetry={retry} onShare={setShareItem} onRemember={conv.ghost ? undefined : rememberText} onOutbox={() => setOutboxOpen(true)} speaking={speaking} onListen={listen} onVoices={() => setReadOpen(true)} />}
           {conv.spentEth > 0 && (
             <p className="mx-auto max-w-[780px] px-6 pb-4 font-mono text-[10.5px] text-dim">
               this chat has cost {fmtEth(conv.spentEth, 6)} ETH{live?.ethUsd ? ` (${fmtUsd(conv.spentEth * live.ethUsd, { micro: true })})` : ''} so far
@@ -2634,6 +2717,7 @@ export function ChatPage() {
       <CrowdDialog open={crowdOpen} onClose={() => setCrowdOpen(false)} />
       <ShareDialog item={shareItem} onClose={() => setShareItem(null)} />
       <OutboxDialog open={outboxOpen} onClose={() => setOutboxOpen(false)} />
+      <ReadAloudDialog open={readOpen} onClose={() => setReadOpen(false)} local={voices.local} cloud={voices.cloud} settings={readCfg} onChange={setReadCfg} />
       <MemoryDialog
         open={memoryOpen}
         onClose={() => setMemoryOpen(false)}
