@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ZkClient } from '@openanonymity/zkapi-browser-sdk'
-import { ArrowUp, ArrowUpFromLine, Brain, KeyRound, Volume2, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
+import { ArrowUp, ArrowUpFromLine, Brain, FileSignature, KeyRound, Volume2, Check, ChevronDown, Columns2, Download, ExternalLink, FileText, Ghost, Globe, ImageIcon, LockKeyhole, Menu, Mic, Paperclip, Plus, ScanFace, ScanText, Share2, ShieldAlert, ShieldCheck, Square, Telescope, Trash2, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { AnimatedNumber } from '../components/ui/AnimatedNumber'
@@ -31,6 +31,7 @@ import { CrowdDialog } from './CrowdDialog'
 import { fitLevel, loadMemoryModel, MAX_RECALL, memoryBlock, recall, useMemory, type Recalled } from './memory'
 import { MemoryDialog, type ModelStatus } from './MemoryDialog'
 import { findWallet, outsideGuard, seedChecksumOk, type GuardHit } from './walletGuard'
+import { checkSigning, type SignResult } from './signCheck'
 import { clearOutbox, installOutbox, useOutbox } from './outbox'
 import { OutboxDialog } from './OutboxDialog'
 import { loadReadAloud, pickVoice, saveReadAloud, speak, speakable, useVoices, type Reading } from './readAloud'
@@ -456,6 +457,41 @@ function PrivacyLine({ web, image, shieldOn }: { web: boolean; image: boolean; s
 }
 
 /** Above the composer: what the shield will hide in the message being typed. */
+const SIGN_TONE = {
+  danger: { box: 'border-bad/40 bg-bad/[0.05]', text: 'text-bad', label: 'RISKY' },
+  warn: { box: 'border-warn/40 bg-warn/[0.04]', text: 'text-warn', label: 'CHECK' },
+  info: { box: 'border-line-2 bg-panel/60', text: 'text-soft', label: 'INFO' },
+} as const
+
+/** Sign Check, above the composer: what a pasted transaction or signature request does. */
+function SignBar({ checks }: { checks: SignResult[] }) {
+  const worst = checks.some((c) => c.level === 'danger') ? 'danger' : checks.some((c) => c.level === 'warn') ? 'warn' : 'info'
+  return (
+    <div className={`mb-2 rounded-lg border px-3 py-2 font-mono text-[10.5px] ${SIGN_TONE[worst].box}`}>
+      <div className={`inline-flex items-center gap-1 tracking-[0.12em] ${SIGN_TONE[worst].text}`}>
+        <FileSignature className="size-3.5" />
+        SIGN CHECK
+      </div>
+      {checks.map((c) => (
+        <div key={`${c.start}:${c.end}`} className="mt-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded border px-1.5 py-px text-[9.5px] tracking-[0.12em] ${SIGN_TONE[c.level].box} ${SIGN_TONE[c.level].text}`}>{SIGN_TONE[c.level].label}</span>
+            <span className="text-soft">
+              {c.kind} · {c.method}
+            </span>
+          </div>
+          {c.lines.map((l) => (
+            <p key={l} className={`mt-1 font-sans text-[12.5px] leading-relaxed ${c.level === 'danger' ? 'text-fg' : 'text-soft'}`}>
+              {l}
+            </p>
+          ))}
+        </div>
+      ))}
+      <p className="mt-1.5 leading-relaxed text-dim">decoded in your browser, nothing looked up online · it shows what this does, not whether the site asking is honest</p>
+    </div>
+  )
+}
+
 /** Wallet Guard, above the composer: what it found and that it won't leave, whatever else is switched on. */
 function GuardBar({ hits, files, map }: { hits: GuardHit[]; files: { name: string; n: number; photo: boolean }[]; map: ShieldMap }) {
   // a real BIP-39 checksum says it is a wallet seed, not words that happen to be on the list
@@ -1559,6 +1595,8 @@ export function ChatPage() {
   }, [input, shieldCfg, shieldOn, aiCurrent, aiHits])
   // Wallet Guard: always on, whatever the shield switch says
   const guardHits = useMemo(() => findWallet(input), [input])
+  // Sign Check: transactions and signature requests, decoded here before anything is sent
+  const signChecks = useMemo(() => checkSigning(input), [input])
 
   // Private Memory: load the in-browser model once there are notes, then pick notes for what is typed
   const memWanted = memory.on && memory.notes.length > 0
@@ -2477,6 +2515,7 @@ export function ChatPage() {
                 onCover={(key) => setAttached((c) => c.map((a) => (a.key === key ? { ...a, cover: a.cover === false } : a)))}
                 warn={fileWarn}
               />}
+            {signChecks.length > 0 && <SignBar checks={signChecks} />}
             {(guardHits.length > 0 || guardFiles.length > 0) && <GuardBar hits={guardHits} files={guardFiles} map={conv.shieldMap ?? {}} />}
             {memPreview && (
               <MemoryBar
