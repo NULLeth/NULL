@@ -28,6 +28,7 @@ import { PARANOID_CUES, PARANOID_DURATION } from './paranoid'
 import { OUTBOX_CUES, OUTBOX_DURATION } from './outbox'
 import { GUARD_CUES, GUARD_DURATION } from './guard'
 import { READ_CUES, READ_DURATION } from './readaloud'
+import { SIGN_CUES, SIGN_DURATION } from './signcheck'
 
 export type Soundtrack = (ctx: OfflineAudioContext, out: AudioNode) => void
 
@@ -639,6 +640,22 @@ export const readSound: Soundtrack = (ctx, out) => {
   for (let s = 0; s < 4; s++) hit(ctx, out, K.reading[0] + s * ((K.reading[1] - K.reading[0]) / 4), 0.14, 160, 80, 0.14)
   K.steps.forEach((at, i) => tick(ctx, out, at, [987.77, 1108.73, 1174.66, 1318.51, 1479.98][i], 0.09))
   K.points.forEach((at, i) => tick(ctx, out, at, [1318.51, 1479.98, 1661.22][i], 0.1))
+  arrival(ctx, out, K.end + 0.1, 0.7)
+}
+
+/** Sign Check promo: the request appears, a select-and-copy click, the paste, a warning double tick, a tick per decoded line, a hit per risky case, three points. */
+export const signSound: Soundtrack = (ctx, out) => {
+  const K = SIGN_CUES
+  pad(ctx, out, 0, SIGN_DURATION, [1.0, K.chat[0], K.cases[0], K.end])
+  arrival(ctx, out, 1.0, 0.55)
+  sweep(ctx, out, K.wallet[0], K.wallet[0] + 0.8, 300, 1100, 0.025)
+  click(ctx, out, K.copy, 0.14, 81001)
+  click(ctx, out, K.paste, 0.14, 81002)
+  tick(ctx, out, K.bar, 880, 0.12)
+  tick(ctx, out, K.bar + 0.12, 880, 0.1)
+  K.lines.forEach((at, i) => tick(ctx, out, at, [1174.66, 1318.51, 1479.98][i], 0.09))
+  K.caseItems.forEach((at) => hit(ctx, out, at, 0.22, 120, 50, 0.3))
+  ;[0.3, 0.65, 1.0].forEach((d, i) => tick(ctx, out, K.honest[0] + d, [1318.51, 1479.98, 1661.22][i], 0.1))
   arrival(ctx, out, K.end + 0.1, 0.7)
 }
 

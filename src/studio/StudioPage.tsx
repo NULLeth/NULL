@@ -15,6 +15,7 @@ import { fetchZkStats, type ZkStats } from './stats'
  */
 
 const CATALOG: { id: string; title: string; note: string; poster: number }[] = [
+  { id: 'signcheck', title: 'Sign Check promo', note: '27 s · transactions and signatures decoded in the browser', poster: 12.6 },
   { id: 'readaloud', title: 'Private Read Aloud promo', note: '27 s · on-device voices only, cloud voices hidden', poster: 13.2 },
   { id: 'guard', title: 'Wallet Guard promo', note: '27 s · seed phrases and keys never leave the browser', poster: 6.4 },
   { id: 'outbox', title: 'Outbox promo', note: '27 s · every request, word for word, keys masked', poster: 12.6 },
